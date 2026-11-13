@@ -23,6 +23,21 @@ def read_questions(dataset_dir: Path) -> Iterator[dict[str, Any]]:
                     yield question
 
 
+def _register(library: DocumentLibrary, dataset_dir: Path, path: str) -> str | None:
+    """Register a drawing named by questions.jsonl. Return None when it cannot be used.
+
+    questions.jsonl is downloaded data, so a path that leaves the dataset folder is refused.
+    """
+    root = dataset_dir.resolve()
+    target = (root / path).resolve()
+    if not target.is_relative_to(root):
+        return None
+    try:
+        return library.register_file(target).id
+    except (UnsupportedDocumentError, FileNotFoundError):
+        return None
+
+
 def run_eval(
     dataset_dir: Path,
     library: DocumentLibrary,
@@ -41,10 +56,7 @@ def run_eval(
                 break
             path = question["path"]
             if path not in document_ids:
-                try:
-                    document_ids[path] = library.register_file(dataset_dir / path).id
-                except (UnsupportedDocumentError, FileNotFoundError):
-                    document_ids[path] = None
+                document_ids[path] = _register(library, dataset_dir, path)
             document_id = document_ids[path]
             if document_id is None:
                 continue

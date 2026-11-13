@@ -101,3 +101,16 @@ def test_cli_ingest_is_idempotent_and_eval_runs(dataset, tmp_path, monkeypatch, 
     assert main(["eval", str(dataset), "--composer", "baseline", "--out", str(out_path)]) == 0
     assert "baseline@1" in capsys.readouterr().out
     assert len(out_path.read_text().splitlines()) == 3
+
+
+@pytest.mark.parametrize("escape", ["../outside.png", "{absolute}"])
+def test_run_eval_refuses_paths_outside_the_dataset(dataset, library, service, tmp_path, escape):
+    outside = dataset.parent / "outside.png"
+    outside.write_bytes(PNG + b"secret")
+    question = {"path": escape.format(absolute=outside), "question": "Windows?", "answer": 4, "type": "count"}
+    (dataset / "questions.jsonl").write_text(json.dumps(question) + "\n")
+
+    summary = run_eval(dataset, library, service, tmp_path / "result.jsonl")
+
+    assert summary == {}
+    assert library.count() == 0
