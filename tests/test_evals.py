@@ -5,9 +5,11 @@ import pytest
 from chatchtg.answering import AnswerService
 from chatchtg.cli import main
 from chatchtg.context.baseline import BaselineComposer
-from chatchtg.evals.runner import run_eval
+from chatchtg.evals.runner import UnknownPriceError, run_eval
 from chatchtg.evals.scoring import extract_number, score
+from chatchtg.llm.client import Completion
 from chatchtg.llm.fake import FakeLLM
+from chatchtg.llm.pricing import cost_usd
 from conftest import PNG
 
 
@@ -71,7 +73,7 @@ def test_run_eval_scores_raster_questions_and_writes_results(dataset, library, t
     service = AnswerService(library, BaselineComposer(), FakeLLM(reply="The answer is 4"))
     out_path = tmp_path / "runs" / "result.jsonl"
 
-    summary = run_eval(dataset, library, service, out_path)
+    summary = run_eval(dataset, library, service, out_path).summary
 
     assert summary == {
         "count": {"total": 1, "scored": 1, "correct": 1},
@@ -87,7 +89,7 @@ def test_run_eval_scores_raster_questions_and_writes_results(dataset, library, t
 
 
 def test_run_eval_respects_the_limit(dataset, library, service, tmp_path):
-    summary = run_eval(dataset, library, service, tmp_path / "result.jsonl", limit=1)
+    summary = run_eval(dataset, library, service, tmp_path / "result.jsonl", limit=1).summary
 
     assert sum(counts["total"] for counts in summary.values()) == 1
 
@@ -122,7 +124,86 @@ def test_run_eval_refuses_paths_outside_the_dataset(dataset, library, service, t
     question = {"path": escape.format(absolute=outside), "question": "Windows?", "answer": 4, "type": "count"}
     (dataset / "questions.jsonl").write_text(json.dumps(question) + "\n")
 
-    summary = run_eval(dataset, library, service, tmp_path / "result.jsonl")
+    summary = run_eval(dataset, library, service, tmp_path / "result.jsonl").summary
 
     assert summary == {}
     assert library.count() == 0
+
+
+class MeteredLLM:
+    """Answers "4" and reports the usage of a model with a known price."""
+
+    def __init__(self, model="claude-opus-5-5"):
+        self.model = model
+
+    def complete(self, context):
+        usage = {"input_tokens": 1_000_000, "output_tokens": 100_000}
+        return Completion(text="4", model=self.model, usage=usage)
+
+
+def test_cost_usd_uses_the_price_of_the_model():
+    usage = {"input_tokens": 1_000_000, "output_tokens": 100_000, "cache_read_input_tokens": 500_000}
+
+    assert cost_usd("claude-opus-5-5", usage) == pytest.approx(4.0 + 2.0 + 2.0)
+    assert cost_usd("fake", usage) == 0
+    assert cost_usd("unknown-model", usage) is None
+
+
+def test_run_eval_records_usage_and_cost(dataset, library, tmp_path):
+    service = AnswerService(library, BaselineComposer(), MeteredLLM())
+    out_path = tmp_path / "result.jsonl"
+
+    run = run_eval(dataset, library, service, out_path)
+
+    rows = [json.loads(line) for line in out_path.read_text().splitlines()]
+    assert rows[0]["usage"] == {"input_tokens": 1_000_000, "output_tokens": 100_000}
+    assert rows[0]["cost_usd"] == pytest.approx(6.0)
+    assert run.cost_usd == pytest.approx(18.0)
+    assert run.stopped_for_cost is False
+
+
+def test_run_eval_stops_before_the_cost_limit(dataset, library, tmp_path):
+    service = AnswerService(library, BaselineComposer(), MeteredLLM())
+    out_path = tmp_path / "result.jsonl"
+
+    run = run_eval(dataset, library, service, out_path, max_cost=13.0)
+
+    # Two answers cost 12 dollars. A third one would pass the limit.
+    assert len(out_path.read_text().splitlines()) == 2
+    assert run.cost_usd == pytest.approx(12.0)
+    assert run.stopped_for_cost is True
+
+
+def test_run_eval_with_a_cost_limit_needs_a_known_price(dataset, library, tmp_path):
+    service = AnswerService(library, BaselineComposer(), MeteredLLM(model="unknown-model"))
+    out_path = tmp_path / "result.jsonl"
+
+    with pytest.raises(UnknownPriceError):
+        run_eval(dataset, library, service, out_path, max_cost=1.0)
+
+    assert len(out_path.read_text().splitlines()) == 1
+
+
+def test_run_eval_sample_is_balanced_and_repeatable(dataset, library, service, tmp_path):
+    first = tmp_path / "first.jsonl"
+    second = tmp_path / "second.jsonl"
+
+    run = run_eval(dataset, library, service, first, sample=2, seed=3)
+    run_eval(dataset, library, service, second, sample=2, seed=3)
+
+    rows = [json.loads(line) for line in first.read_text().splitlines()]
+    assert len(rows) == 2
+    assert len({row["type"] for row in rows}) == 2
+    assert [row["question"] for row in rows] == [
+        json.loads(line)["question"] for line in second.read_text().splitlines()
+    ]
+    assert sum(counts["total"] for counts in run.summary.values()) == 2
+
+
+def test_cli_eval_prints_the_cost(dataset, tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CHATCHTG_DATA_ROOT", str(dataset.parent))
+    monkeypatch.setenv("CHATCHTG_STATE_DIR", str(tmp_path / "state"))
+
+    assert main(["eval", str(dataset), "--sample", "2", "--max-cost", "1"]) == 0
+
+    assert "Questions answered: 2. Cost: $0.00." in capsys.readouterr().out

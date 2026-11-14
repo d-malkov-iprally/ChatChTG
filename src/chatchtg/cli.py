@@ -13,7 +13,7 @@ from chatchtg.context.composer import composer_id
 from chatchtg.context.registry import COMPOSERS, get_composer
 from chatchtg.documents.library import RASTER_SUFFIXES, UnsupportedDocumentError
 from chatchtg.evals.benchmark import build_benchmark
-from chatchtg.evals.runner import run_eval
+from chatchtg.evals.runner import UnknownPriceError, run_eval
 from chatchtg.wiring import build_answer_service, build_library
 
 
@@ -62,9 +62,22 @@ def evaluate(args: argparse.Namespace) -> int:
     service = build_answer_service(settings, library, composer=composer.name)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     out_path = args.out or settings.state_dir / "eval-runs" / f"{stamp}-{composer_id(composer)}.jsonl"
-    summary = run_eval(
-        dataset_dir, library, service, out_path, limit=args.limit, questions_file=args.questions
-    )
+    try:
+        run = run_eval(
+            dataset_dir,
+            library,
+            service,
+            out_path,
+            limit=args.limit,
+            questions_file=args.questions,
+            sample=args.sample,
+            seed=args.seed,
+            max_cost=args.max_cost,
+        )
+    except UnknownPriceError as error:
+        print(f"{error} Answers so far: {out_path}", file=sys.stderr)
+        return 1
+    summary = run.summary
 
     print(f"Composer: {composer_id(composer)}. LLM provider: {settings.llm_provider}.")
     print(f"{'type':<10}{'total':>8}{'scored':>8}{'correct':>9}{'accuracy':>10}")
@@ -74,6 +87,10 @@ def evaluate(args: argparse.Namespace) -> int:
             f"{question_type:<10}{counts['total']:>8}{counts['scored']:>8}"
             f"{counts['correct']:>9}{accuracy:>10}"
         )
+    answered = sum(counts["total"] for counts in summary.values())
+    print(f"Questions answered: {answered}. Cost: ${run.cost_usd:.2f}.")
+    if run.stopped_for_cost:
+        print(f"Stopped early: the next question could pass the ${args.max_cost:.2f} limit.")
     print(f"Results: {out_path}")
     return 0
 
@@ -114,6 +131,13 @@ def main(argv: list[str] | None = None) -> int:
     eval_parser.add_argument("--out", type=Path, help="results file (default: var/eval-runs/)")
     eval_parser.add_argument(
         "--questions", default="questions.jsonl", help="question file inside the dataset folder"
+    )
+    eval_parser.add_argument(
+        "--sample", type=int, help="answer this many questions, balanced over source and type"
+    )
+    eval_parser.add_argument("--seed", type=int, default=0, help="seed of the --sample pick")
+    eval_parser.add_argument(
+        "--max-cost", type=float, help="stop before the cost passes this many US dollars"
     )
     eval_parser.set_defaults(run=evaluate)
 
