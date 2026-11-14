@@ -116,3 +116,26 @@ def test_method_words():
     assert "printed" in describe_method("printed+measured") and "measured" in describe_method("printed+measured")
     assert "LLM" in describe_method(None)
     assert describe_method("something-new") == "something-new"
+
+
+def test_the_tag_of_a_narrow_room_is_made_small_enough_to_stay_in_the_room():
+    narrow = [[100, 100], [180, 100], [180, 400], [100, 400]]
+    wide = [[100, 100], [900, 100], [900, 400], [100, 400]]
+    item = {"text": "5.14", "kind": "printed", "value": 13.21, "unit": "m²"}
+
+    small = render_evidence(png(size=(2000, 1500)), [{**item, "polygon": narrow}])
+    large = render_evidence(png(size=(2000, 1500)), [{**item, "polygon": wide}])
+
+    assert all(small.getpixel((200, y)) == (255, 255, 255) for y in range(90, 160))   # right of the room
+    def tag_pixels(image):
+        return sum(image.getpixel((x, y)) == BLUE for x in range(104, 400) for y in range(104, 140))
+
+    assert 0 < tag_pixels(small) < tag_pixels(large)                                  # there, but smaller
+
+
+def test_the_box_of_a_small_label_on_a_large_drawing_does_not_cover_the_label():
+    image = render_evidence(png(size=(2480, 1753)), [{"text": "Stanza", "box": [1044, 316, 1096, 328]}])
+
+    inside = [image.getpixel((x, y)) for x in range(1045, 1096) for y in range(317, 328)]
+    assert set(inside) == {(255, 255, 255)}
+    assert image.getpixel((1044, 322)) == RED

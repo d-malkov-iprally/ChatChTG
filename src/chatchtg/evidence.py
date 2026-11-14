@@ -73,9 +73,13 @@ FALLBACK_COLOUR = ("green", (44, 160, 44))  # an unknown kind; its words are the
 FILL_ALPHA = 40  # of 255: the printed labels stay readable under the fill
 
 # The line and the tag grow with the image, because the app shows large drawings scaled down.
-LINE_WIDTH = 2  # pixels for each 1000 pixels of the longer side
-FONT_SIZE = 12
+LINE_WIDTH = 1.5  # pixels for each 1000 pixels of the longer side
+FONT_SIZE = 9
 MIN_FONT_SIZE = 11
+# The tag of a room is made smaller until it takes at most this part of the room's width, so
+# that the tags of a dense plan (1:200, 40 rooms) do not cover each other and the labels.
+TAG_PART_OF_WIDTH = 0.7
+SMALLEST_FONT_SIZE = 5  # the limit of that, again for each 1000 pixels; MIN_FONT_SIZE in pixels
 POINT_RADIUS = 8
 FOCUS_MARGIN = 100  # pixels around an item in the zoomed view, at least
 
@@ -198,6 +202,15 @@ def _tag_text(item: dict[str, Any]) -> str:
     return " ".join(part for part in (_text(item), _number_text(item.get("value"))) if part)
 
 
+def _fitted_font(draw: ImageDraw.ImageDraw, tag: str, size: int, smallest: int, room: float):
+    """The default font in ``size``, or smaller so that ``tag`` is at most ``room`` pixels wide."""
+    font = ImageFont.load_default(size=size)
+    width = draw.textlength(tag, font=font)
+    if width <= room or size <= smallest:
+        return font
+    return ImageFont.load_default(size=max(smallest, int(size * room / width)))
+
+
 def _draw_tag(draw: ImageDraw.ImageDraw, at: tuple[float, float], above: bool, tag: str, font, colour) -> None:
     """White text on a rectangle of the item's colour, kept inside the image."""
     if not tag:
@@ -228,7 +241,9 @@ def render_evidence(content: bytes, evidence: list[dict[str, Any]], focus: int |
     scale = max(image.size) / 1000
     width = max(2, round(LINE_WIDTH * scale))
     radius = max(POINT_RADIUS, round(POINT_RADIUS * scale))
-    font = ImageFont.load_default(size=max(MIN_FONT_SIZE, round(FONT_SIZE * scale)))
+    font_size = max(MIN_FONT_SIZE, round(FONT_SIZE * scale))
+    smallest = min(font_size, max(MIN_FONT_SIZE, round(SMALLEST_FONT_SIZE * scale)))
+    font = ImageFont.load_default(size=font_size)
 
     shapes = []  # (item, shape, data, colour) of the items that can be drawn
     for item in evidence:
@@ -249,13 +264,15 @@ def render_evidence(content: bytes, evidence: list[dict[str, Any]], focus: int |
     annotated = Image.alpha_composite(image.convert("RGBA"), overlay).convert("RGB")
 
     draw = ImageDraw.Draw(annotated)
+    grow = width - 1
     for item, shape, data, colour in shapes:
         left, top, right, bottom = _bounds(shape, data, radius)
         if shape == "polygon":
             points = [(_limit(x), _limit(y)) for x, y in data]
             draw.line([*points, points[0], points[1]], fill=colour, width=width, joint="curve")
         elif shape == "box":
-            draw.rectangle((left, top, right, bottom), outline=colour, width=width)
+            # The line goes outwards from the box, so that it does not cover a small label.
+            draw.rectangle((left - grow, top - grow, right + grow, bottom + grow), outline=colour, width=width)
         else:
             draw.ellipse((left, top, right, bottom), outline=colour, width=width)
     # The tags last, so that no outline crosses a tag.
@@ -265,9 +282,11 @@ def render_evidence(content: bytes, evidence: list[dict[str, Any]], focus: int |
         if shape == "polygon":
             # In the corner of the room, not on its centre: the printed label is there.
             x, y = min(data, key=lambda p: (_limit(p[0]) - left) ** 2 + (_limit(p[1]) - top) ** 2)
-            _draw_tag(draw, (_limit(x) + width, _limit(y) + width), False, tag, font, colour)
+            fitted = _fitted_font(draw, tag, font_size, smallest, TAG_PART_OF_WIDTH * (right - left))
+            _draw_tag(draw, (_limit(x) + width, _limit(y) + width), False, tag, fitted, colour)
         else:
-            _draw_tag(draw, (left, top), True, tag, font, colour)
+            lift = grow if shape == "box" else 0
+            _draw_tag(draw, (left - lift, top - lift), True, tag, font, colour)
 
     if focus is None or isinstance(focus, bool) or not isinstance(focus, int) or not 0 <= focus < len(evidence):
         return annotated

@@ -93,7 +93,8 @@ if document is not None:
                         "Zoom to",
                         [None, *drawn],
                         format_func=lambda index: (
-                            "Whole drawing" if index is None else str(evidence[index].get("text", ""))
+                            # The number is the row of the table: items can have the same text.
+                            "Whole drawing" if index is None else f"{index}: {evidence[index].get('text', '')}"
                         ),
                         key=f"zoom-{answer['number']}",
                     )
