@@ -91,3 +91,10 @@ def test_a_seed_outside_any_room_is_flagged():
     [room] = measure_rooms(sketch.image(), [(-5, -5)], PPM)
     assert room.area_m2 is None
     assert "no-region" in room.flags
+
+
+def test_an_image_without_free_pixels_has_no_rooms():
+    rooms = measure_rooms(np.zeros((300, 300, 3), np.uint8), [(10, 10)], 59.0)
+
+    assert rooms[0].area_m2 is None
+    assert rooms[0].flags == ["no-region"]

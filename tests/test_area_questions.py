@@ -198,3 +198,41 @@ def test_label_matches_despite_accents_case_and_ocr_slips(name, label):
 )
 def test_label_does_not_match_another_room_name(name, label):
     assert not label_matches(name, label)
+
+
+SHARED = [
+    RoomRow("1.01", "Zimmer", 15.0, "A", False, region="1.01"),
+    RoomRow("1.02", "Korridor", None, "A", False, region="1.01"),
+    RoomRow("1.03", "Bad", 5.0, "A", False),
+]
+
+
+def test_rooms_measured_as_one_region_count_once_in_a_total():
+    answer = answer_query(AreaQuery(kind="floor"), SHARED)
+
+    assert answer.value == 20.0
+    assert not answer.missing
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        AreaQuery(kind="room", number="1.01"),
+        AreaQuery(kind="room", number="1.02"),
+        AreaQuery(kind="label", label="Zimmer"),
+    ],
+)
+def test_a_part_of_a_shared_region_has_no_area_of_its_own(query):
+    assert answer_query(query, SHARED).value is None
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "What is the net floor area of apartment A and B?",
+        "What is the net floor area of room U1.03 and room U1.04?",
+        "Wie gross ist die Nettofläche von Wohnung A und B?",
+    ],
+)
+def test_a_question_about_two_rooms_or_apartments_is_not_read_as_one(text):
+    assert parse_question(text) is None

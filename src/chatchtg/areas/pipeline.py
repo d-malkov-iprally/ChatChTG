@@ -45,6 +45,9 @@ class PlanRoom:
     seed: tuple[float, float]
     polygon: list[tuple[float, float]] = field(default_factory=list)
     flags: list[str] = field(default_factory=list)
+    region: str | None = None
+    """Set when no wall was found between this room and another: the number of the room
+    that carries the area of the whole region. The other rooms of the region have no area."""
 
 
 @dataclass
@@ -59,7 +62,10 @@ class PlanAnalysis:
 
     def rows(self) -> list[RoomRow]:
         return [
-            RoomRow(number=r.number, name=r.name, area=r.area, apartment=r.apartment, outdoor=r.outdoor)
+            RoomRow(
+                number=r.number, name=r.name, area=r.area, apartment=r.apartment,
+                outdoor=r.outdoor, region=r.region,
+            )
             for r in self.rooms
         ]
 
@@ -118,10 +124,33 @@ def analyse_plan(image: np.ndarray, labels: PlanLabels | None = None) -> PlanAna
                 outdoor=bool(is_outdoor), seed=label.seed, polygon=measure.polygon, flags=list(measure.flags),
             )
         )
+    _join_shared_regions(rooms, [measure.shares_with for measure in measures])
     return PlanAnalysis(
         scale=scale, scale_read=labels.scale is not None, pixels_per_metre=ppm, rooms=rooms,
         missing_numbers=list(labels.missing_numbers),
     )
+
+
+def _join_shared_regions(rooms: list[PlanRoom], shares_with: list[int | None]) -> None:
+    """Keep one area for the rooms that were measured as one region.
+
+    The first room of such a region has the area of all of it. The other rooms were given
+    a part of the same region, so a total counted that part twice. Printed areas are not
+    affected. Where only some rooms of the region print their area, the others get none.
+    """
+    groups: dict[int, list[int]] = {}
+    for index, owner in enumerate(shares_with):
+        if owner is not None:
+            groups.setdefault(owner, [owner]).append(index)
+    for owner, members in groups.items():
+        measured = [index for index in members if rooms[index].method != "printed"]
+        joined = len(measured) == len(members)
+        for index in measured:
+            room = rooms[index]
+            if joined:
+                room.region = rooms[owner].number
+            if not joined or index != owner:
+                room.area, room.method = None, None
 
 
 def decode_image(content: bytes) -> np.ndarray:

@@ -10,6 +10,8 @@ room table as extra evidence.
 
 from __future__ import annotations
 
+import logging
+
 from chatchtg.areas.pipeline import PlanAnalysis, analyse_bytes
 from chatchtg.areas.questions import AreaAnswer, parse_question, answer_query
 from chatchtg.context.baseline import SYSTEM_PROMPT, BaselineComposer
@@ -26,9 +28,17 @@ AREA_SYSTEM_PROMPT = (
 
 RASTER_TYPES = frozenset({"image/png", "image/jpeg"})
 
+logger = logging.getLogger(__name__)
+
 
 def _format_area(value: float) -> str:
     return f"{value:.2f}"
+
+
+def _scale_text(analysis: PlanAnalysis) -> str:
+    if analysis.scale_read:
+        return f"scale 1:{analysis.scale}"
+    return f"scale not read, 1:{analysis.scale} assumed, so the measured areas may be wrong"
 
 
 def result_text(analysis: PlanAnalysis, answer: AreaAnswer) -> str:
@@ -36,6 +46,9 @@ def result_text(analysis: PlanAnalysis, answer: AreaAnswer) -> str:
     methods = {room.number: room.method for room in analysis.rooms}
     for room in answer.rooms:
         name = room.name or "no name"
+        if room.area is None:  # only a room that was measured together with another one
+            lines.append(f"- {room.number} {name}: included in the area of {room.region}")
+            continue
         lines.append(f"- {room.number} {name}: {_format_area(room.area)} m² ({methods.get(room.number)})")
     lines.append(f"Result: {_format_area(answer.value)} m²")
     return "\n".join(lines)
@@ -43,11 +56,15 @@ def result_text(analysis: PlanAnalysis, answer: AreaAnswer) -> str:
 
 def table_text(analysis: PlanAnalysis) -> str:
     lines = [
-        f"A measurement tool read this drawing (scale 1:{analysis.scale}). It could not answer "
+        f"A measurement tool read this drawing ({_scale_text(analysis)}). It could not answer "
         "the question alone. Its room table, which may be incomplete:"
     ]
     for room in analysis.rooms:
         area = f"{_format_area(room.area)} m² ({room.method})" if room.area is not None else "area unknown"
+        if room.region is not None and room.region != room.number:
+            area = f"measured together with {room.region}"
+        elif room.region is not None:
+            area += ", this is the area of the room together with its neighbours listed below"
         where = f", apartment {room.apartment}" if room.apartment else ""
         outdoor = ", outdoor" if room.outdoor else ""
         lines.append(f"- {room.number} {room.name or 'no name'}: {area}{where}{outdoor}")
@@ -58,7 +75,7 @@ def table_text(analysis: PlanAnalysis) -> str:
 
 class AreaComposer:
     name = "areas"
-    version = 1
+    version = 2
 
     def __init__(self) -> None:
         self._baseline = BaselineComposer()
@@ -70,6 +87,8 @@ class AreaComposer:
         try:
             analysis = analyse_bytes(request.content)
         except Exception:  # an image the pipeline cannot read is answered as in the baseline
+            # Logged, because a fault in the pipeline would otherwise look like a baseline run.
+            logger.warning("The area pipeline failed on %s", request.document.filename, exc_info=True)
             return self._baseline.compose(request)
         answer = answer_query(query, analysis.rows())
         # A total may lack a room whose label was not read. On a plan that prints its areas
@@ -77,6 +96,11 @@ class AreaComposer:
         # printed areas it would have to estimate, and the tool's total is the better answer
         # (measured: right 3 times of 4 even with a gap in the numbering).
         doubtful = analysis.may_be_incomplete(query.kind) and analysis.prints_areas()
+        if not analysis.scale_read:
+            # A measured area depends on the scale. With a guessed scale it can be 4 times
+            # off, so the LLM gets the image. A printed area does not depend on the scale.
+            methods = {room.number: room.method for room in analysis.rooms}
+            doubtful = doubtful or any(methods.get(room.number) != "printed" for room in answer.rooms)
         if answer.value is not None and not doubtful:
             return Context(
                 system=AREA_SYSTEM_PROMPT,

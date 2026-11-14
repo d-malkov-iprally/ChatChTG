@@ -43,6 +43,9 @@ class RoomRow:
     """Area in m², printed or measured. None when unknown."""
     apartment: str | None
     outdoor: bool
+    region: str | None = None
+    """Set when this room and others were measured as one region: the number of the room
+    whose area is the area of that region. The other rooms of the region have no area."""
 
 
 @dataclass
@@ -87,6 +90,12 @@ _TEMPLATES: list[tuple[Kind, str]] = [
     ("label", rf"\btutti i locali denominati {_quoted(r'(?:in questo|\?|$)')}"),
 ]
 _COMPILED = [(kind, re.compile(pattern)) for kind, pattern in _TEMPLATES]
+# "apartment A and B", "room 1.03, 1.04": the question asks for more than the one room or
+# apartment that a template reads.
+_ONE_MORE = re.compile(
+    r"\s*(?:,|&|\+|(?:and|or|und|oder|et|ou|e|o)\b)\s*(?:\w+\s+)?"
+    r"(?:[A-Z]{0,2}\d+\.\d+|[A-Z]{1,2}\b)"
+)
 
 
 def parse_question(text: str) -> AreaQuery | None:
@@ -95,6 +104,8 @@ def parse_question(text: str) -> AreaQuery | None:
     for kind, pattern in _COMPILED:
         match = pattern.search(text)
         if match:
+            if kind in ("room", "apartment") and _ONE_MORE.match(text, match.end()):
+                return None
             groups = match.groupdict()
             return AreaQuery(
                 kind=kind,
@@ -199,12 +210,23 @@ def answer_query(query: AreaQuery, rooms: list[RoomRow]) -> AreaAnswer:
     """Add up the rooms a query asks for.
 
     The value is None when no room fits the query or when one of the rooms has no area.
+    Rooms that were measured as one region are counted once, and only when the query asks
+    for all of them: the area of one of them alone is not known.
     """
     counted, what = _select(query, rooms)
     if not counted:
         missing = [query.number] if query.kind == "room" and query.number else []
         return AreaAnswer(value=None, missing=missing, note=f"Found no {what} in the room table.")
-    missing = [room.number for room in counted if room.area is None]
+    split = {
+        room.region
+        for room in rooms
+        if room.region is not None and not any(room is other for other in counted)
+    }
+    missing = [
+        room.number
+        for room in counted
+        if room.region in split or (room.area is None and room.region is None)
+    ]
     if missing:
         return AreaAnswer(
             value=None,
