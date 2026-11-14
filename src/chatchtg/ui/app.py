@@ -64,7 +64,6 @@ def inject_styles() -> None:
         }
         .brand-mark { display: flex; align-items: center; gap: 0.68rem; min-width: 12.5rem; }
         .brand-name { font-size: 1.14rem; font-weight: 740; letter-spacing: -0.02em; }
-        .brand-caret { color: #aeb7cd; font-size: 0.9rem; }
         .primary-nav { display: flex; gap: 0.36rem; height: 100%; align-items: center; }
         .primary-nav span { color: #c5cad9; padding: 0.55rem 1rem; border-radius: 0.35rem; font-size: 0.94rem; }
         .primary-nav .active { color: #fff; background: linear-gradient(135deg, #62558f, #413d65); box-shadow: inset 0 0 0 1px rgba(222, 210, 255, 0.15); }
@@ -150,7 +149,7 @@ def render_header() -> None:
     st.markdown(
         """
         <div class="top-chrome">
-          <div class="brand-mark"><span class="brand-name">ChatChTG</span><span class="brand-caret">⌄</span></div>
+          <div class="brand-mark"><span class="brand-name">ChatChTG</span></div>
           <div class="primary-nav"><span class="active">Analyze</span><span>Documents</span></div>
         </div>
         """,
