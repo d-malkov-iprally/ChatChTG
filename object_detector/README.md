@@ -1,0 +1,78 @@
+# object_detector
+
+Training of a detector for the symbols that the floor-plan benchmark counts: window, door, toilet, sink, bathtub, shower and sauna bench. The detector is RF-DETR, fine-tuned on the labels of CubiCasa5K. Training runs on Modal ([ADR 0004](../docs/ADR/0004-modal-for-detector-training.md)).
+
+## Licence of the data
+
+CubiCasa5K (https://zenodo.org/records/2613548) is CC BY-NC-SA 4.0. A model that is trained on it is for non-commercial use only. No file of the dataset and no trained weight is in this repository.
+
+## Set up, once
+
+```sh
+uv sync --group train                      # installs the Modal client
+uv run --group train modal setup           # opens a browser to log in to Modal
+```
+
+A GPU needs a payment method on the Modal account.
+
+To compare the labels and the predictions with the benchmark answers, copy the benchmark questions to the volume (25 MB). Without this step, those comparisons are left out:
+
+```sh
+uv run --group train modal volume put chatchtg-object-detector data/floorplans/questions.jsonl benchmark/questions.jsonl
+```
+
+## Commands
+
+Run them from the root of the repository.
+
+```sh
+uv run --group train modal run -m object_detector.modal_app::smoke          # a GPU works
+uv run --group train modal run -m object_detector.modal_app::download       # CubiCasa5K to the volume, 5.5 GB
+uv run --group train modal run -m object_detector.modal_app::build_dataset  # labels to a COCO dataset
+uv run --group train modal run --detach -m object_detector.modal_app::train --run-name large-1024
+uv run --group train modal run -m object_detector.modal_app::evaluate --run-name large-1024
+```
+
+- `download` does nothing if the data is on the volume.
+- `build_dataset` prints the number of boxes of each class, the plans that it skipped, and how often the label counts equal the benchmark answers.
+- `train` has the options `--size` (nano, small, medium, large), `--resolution` (a multiple of 32), `--epochs`, `--batch-size`, `--grad-accum-steps` and `--limit`. With `--limit 200 --epochs 1` it trains on 200 images, as a quick check of the whole pipeline.
+- `train` with the name of a run that was stopped continues that run from its last checkpoint. Modal can stop a GPU container at any time, and it then starts the function again by itself.
+- `--detach` keeps the run alive when the terminal closes. Read its output with `uv run --group train modal app logs -f chatchtg-object-detector`. Stop it with `uv run --group train modal app stop chatchtg-object-detector`.
+- `evaluate` selects the minimum score that gives the best counts on the validation split, then scores the test split with that value: for each class, on how many plans the count is exactly right, and the mean error of the count.
+
+## Where the results are
+
+All files are on the Modal volume `chatchtg-object-detector`:
+
+| Path | Content |
+|---|---|
+| `raw/cubicasa5k/` | the extracted dataset |
+| `datasets/cubicasa-v1/` | `train`, `valid`, `test` with `_annotations.coco.json` and the images, `stats.json`, `label_check.json` |
+| `runs/<run>/` | `checkpoint_best_total.pth`, `last.ckpt`, `scores.json`, `predictions_test.json`, `samples/` |
+
+Download the checkpoint of a run:
+
+```sh
+uv run --group train modal volume get chatchtg-object-detector runs/large-1024/checkpoint_best_total.pth var/models/
+```
+
+## The dataset
+
+- The split is the split of CubiCasa5K: 4,200 plans to train, 400 to validate, 400 to test. The 2019 model of CubiCasa5K has the same test plans.
+- The image of a plan is its `F1_original.png`, with the name `<category>-<id>.png`. That is the name and the size of the plan in the benchmark of this project.
+- `classes.py` maps the fixture names of CubiCasa5K to the classes. A urinal is not a toilet. A double sink is one sink. A shower screen is not a shower.
+- A door box covers the opening in the wall and the drawn swing. An opening without a door leaf is not a door.
+- A label file holds all floors of a building. All of them are read, because the image shows them side by side.
+- A plan is skipped if more than 20% of its boxes are outside the image.
+
+## Files
+
+| File | Content |
+|---|---|
+| `classes.py` | the classes and the name mapping |
+| `cubicasa_svg.py` | `model.svg` to boxes |
+| `dataset.py` | the COCO dataset |
+| `scoring.py` | scores of counts against the labels and against the benchmark |
+| `modal_app.py` | the Modal functions |
+
+The tests are in `tests/test_object_detector.py`. They need no Modal account and no GPU.
