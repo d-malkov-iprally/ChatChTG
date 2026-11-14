@@ -100,6 +100,8 @@ class SqliteMetadataStore:
 
     def patch_attributes(self, document_id: str, patch: dict[str, Any]) -> DocumentRecord | None:
         with closing(self._connect()) as conn, conn:
+            # Take the write lock before reading, so a concurrent patch is not lost.
+            conn.execute("BEGIN IMMEDIATE")
             row = conn.execute(
                 "SELECT attributes FROM documents WHERE id = ?", (document_id,)
             ).fetchone()

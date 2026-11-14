@@ -34,7 +34,7 @@ def _register(library: DocumentLibrary, dataset_dir: Path, path: str) -> str | N
         return None
     try:
         return library.register_file(target).id
-    except (UnsupportedDocumentError, FileNotFoundError):
+    except (UnsupportedDocumentError, OSError):  # missing, a folder, or not readable
         return None
 
 

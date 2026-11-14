@@ -20,6 +20,10 @@ from conftest import PNG
         ("Floor 2 has 150 windows", 150),
         ("The area is 45.5 m2.", 45.5),
         ("-3", -3),
+        ("Pinta-ala on 63,84 m2", 63.84),
+        ("12,5", 12.5),
+        ("About 50 m^2", 50),
+        ("1,234,567 mm", 1234567),
         ("No number here", None),
     ],
 )
@@ -101,6 +105,14 @@ def test_cli_ingest_is_idempotent_and_eval_runs(dataset, tmp_path, monkeypatch, 
     assert main(["eval", str(dataset), "--composer", "baseline", "--out", str(out_path)]) == 0
     assert "baseline@1" in capsys.readouterr().out
     assert len(out_path.read_text().splitlines()) == 3
+
+
+def test_cli_eval_without_questions_file_writes_nothing(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CHATCHTG_STATE_DIR", str(tmp_path / "state"))
+
+    assert main(["eval", str(tmp_path / "missing")]) == 2
+    assert "No questions.jsonl" in capsys.readouterr().err
+    assert not (tmp_path / "state" / "eval-runs").exists()
 
 
 @pytest.mark.parametrize("escape", ["../outside.png", "{absolute}"])

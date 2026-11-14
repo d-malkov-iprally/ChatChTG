@@ -71,3 +71,31 @@ def test_list_is_paged(library):
     ids = {library.add_upload(PNG + bytes([i]), f"{i}.png").id for i in range(3)}
 
     assert {r.id for r in library.list(limit=2)} | {r.id for r in library.list(limit=2, offset=2)} == ids
+
+
+def test_registering_moved_content_repairs_the_location(library, data_root):
+    old = data_root / "preview" / "plan.png"
+    old.parent.mkdir()
+    old.write_bytes(PNG)
+    record = library.register_file(old)
+    old.unlink()
+    new = data_root / "full" / "plan.png"
+    new.parent.mkdir()
+    new.write_bytes(PNG)
+
+    again = library.register_file(new)
+
+    assert again.id == record.id
+    assert library.read(record.id) == PNG
+
+
+def test_registering_again_adds_missing_attributes_only(library, data_root):
+    path = data_root / "plan.png"
+    path.write_bytes(PNG)
+    library.register_file(path, attributes={"source": "first"})
+
+    again = library.register_file(path, attributes={"source": "second", "licence_file": "L.md"})
+
+    assert again.attributes["source"] == "first"
+    assert again.attributes["licence_file"] == "L.md"
+    assert library.get(again.id).attributes == again.attributes

@@ -33,7 +33,7 @@ class AnswerService:
 
     def answer_traced(self, request: AnswerRequest) -> AnswerTrace:
         document = self._library.get(request.document_id)
-        content = self._library.read(request.document_id)
+        content = self._library.content(document)
         context = self._composer.compose(
             ComposerInput(document=document, content=content, message=request.message)
         )

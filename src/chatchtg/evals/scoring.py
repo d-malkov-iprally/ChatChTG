@@ -13,16 +13,24 @@ EXACT_TYPES = frozenset({"count"})
 TOLERANCE_TYPES = frozenset({"area", "length", "volume"})
 RELATIVE_TOLERANCE = 0.02
 
-# A number that does not follow a letter, so the "2" of "m2" is not taken as the answer.
-_NUMBER = re.compile(r"(?<![A-Za-z\d.,])-?\d+(?:,\d{3})*(?:\.\d+)?")
+# A number that does not follow a letter or "^", so the "2" of "m2" and "m^2" is not
+# taken as the answer. Either digit groups ("1,234.5") or one decimal mark ("45.5", "45,5").
+_NUMBER = re.compile(
+    r"(?<![A-Za-z\d.,^])-?"
+    r"(?:(?P<grouped>\d{1,3}(?:,\d{3})+(?![\d,])(?:\.\d+)?)|\d+(?:[.,]\d+)?)"
+)
 
 
 def extract_number(text: str) -> float | None:
-    """Return the last number in ``text``. Commas between digit groups are ignored."""
-    matches = _NUMBER.findall(text)
+    """Return the last number in ``text``.
+
+    Commas between groups of three digits are ignored. Any other comma is a decimal mark.
+    """
+    matches = list(_NUMBER.finditer(text))
     if not matches:
         return None
-    return float(matches[-1].replace(",", ""))
+    last = matches[-1]
+    return float(last.group().replace(",", "" if last.group("grouped") else "."))
 
 
 def score(question_type: str, expected: Any, response_text: str) -> bool | None:

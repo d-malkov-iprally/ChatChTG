@@ -34,16 +34,14 @@ def ingest(args: argparse.Namespace) -> int:
     for path in sorted(drawings_dir.rglob("*")):
         if not path.is_file() or path.suffix.lower() not in RASTER_SUFFIXES:
             continue
-        source = path.relative_to(drawings_dir).parts[0]
+        attributes = {"original_path": path.relative_to(dataset_dir).as_posix()}
+        parts = path.relative_to(drawings_dir).parts
+        if len(parts) > 1:
+            # Only a file inside a source folder has a source and a licence file.
+            attributes["source"] = parts[0]
+            attributes["licence_file"] = f"data/{parts[0]}/LICENSE.md"
         try:
-            library.register_file(
-                path,
-                attributes={
-                    "source": source,
-                    "original_path": path.relative_to(dataset_dir).as_posix(),
-                    "licence_file": f"data/{source}/LICENSE.md",
-                },
-            )
+            library.register_file(path, attributes=attributes)
             seen += 1
         except UnsupportedDocumentError:
             skipped += 1
@@ -53,13 +51,17 @@ def ingest(args: argparse.Namespace) -> int:
 
 
 def evaluate(args: argparse.Namespace) -> int:
+    dataset_dir: Path = args.dataset_dir.resolve()
+    if not (dataset_dir / "questions.jsonl").is_file():
+        print(f"No questions.jsonl in {dataset_dir}", file=sys.stderr)
+        return 2
     settings = Settings.from_env()
     composer = get_composer(args.composer or settings.composer)
     library = build_library(settings)
     service = build_answer_service(settings, library, composer=composer.name)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     out_path = args.out or settings.state_dir / "eval-runs" / f"{stamp}-{composer_id(composer)}.jsonl"
-    summary = run_eval(args.dataset_dir.resolve(), library, service, out_path, limit=args.limit)
+    summary = run_eval(dataset_dir, library, service, out_path, limit=args.limit)
 
     print(f"Composer: {composer_id(composer)}. LLM provider: {settings.llm_provider}.")
     print(f"{'type':<10}{'total':>8}{'scored':>8}{'correct':>9}{'accuracy':>10}")
