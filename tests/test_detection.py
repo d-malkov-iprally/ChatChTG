@@ -1,6 +1,7 @@
 import io
 from pathlib import Path
 
+import pytest
 from PIL import Image
 from streamlit.testing.v1 import AppTest
 
@@ -90,7 +91,10 @@ def test_app_refuses_a_folder_outside_the_data_folder(tmp_path, monkeypatch):
     data_root = tmp_path / "data"
     data_root.mkdir()
     Image.new("RGB", (8, 8), "white").save(tmp_path / "secret.png")
-    (data_root / "link.png").symlink_to(tmp_path / "secret.png")
+    try:
+        (data_root / "link.png").symlink_to(tmp_path / "secret.png")
+    except OSError as error:
+        pytest.skip(f"Creating symlinks is not permitted on this host: {error}")
     monkeypatch.setenv("CHATCHTG_DATA_ROOT", str(data_root))
 
     app = AppTest.from_file(APP, default_timeout=30).run()

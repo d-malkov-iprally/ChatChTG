@@ -23,6 +23,8 @@ def test_app_answers_a_question_about_a_registered_document(tmp_path, monkeypatc
     assert not app.exception
 
     app.radio[0].set_value("Registered document").run()
+    assert any("AI Assistant" in block.value for block in app.markdown)
+    assert any("Drawing ready" in block.value for block in app.markdown)
     app.text_area[1].set_value("How many doors?")
     app.button[1].click().run()
 
