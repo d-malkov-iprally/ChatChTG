@@ -1,4 +1,4 @@
-"""Command line entry point: chatchtg serve | ingest | eval."""
+"""Command line entry point: chatchtg serve | ingest | eval | benchmark."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from chatchtg.config import Settings
 from chatchtg.context.composer import composer_id
 from chatchtg.context.registry import COMPOSERS, get_composer
 from chatchtg.documents.library import RASTER_SUFFIXES, UnsupportedDocumentError
+from chatchtg.evals.benchmark import build_benchmark
 from chatchtg.evals.runner import run_eval
 from chatchtg.wiring import build_answer_service, build_library
 
@@ -52,8 +53,8 @@ def ingest(args: argparse.Namespace) -> int:
 
 def evaluate(args: argparse.Namespace) -> int:
     dataset_dir: Path = args.dataset_dir.resolve()
-    if not (dataset_dir / "questions.jsonl").is_file():
-        print(f"No questions.jsonl in {dataset_dir}", file=sys.stderr)
+    if not (dataset_dir / args.questions).is_file():
+        print(f"No {args.questions} in {dataset_dir}", file=sys.stderr)
         return 2
     settings = Settings.from_env()
     composer = get_composer(args.composer or settings.composer)
@@ -61,7 +62,9 @@ def evaluate(args: argparse.Namespace) -> int:
     service = build_answer_service(settings, library, composer=composer.name)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     out_path = args.out or settings.state_dir / "eval-runs" / f"{stamp}-{composer_id(composer)}.jsonl"
-    summary = run_eval(dataset_dir, library, service, out_path, limit=args.limit)
+    summary = run_eval(
+        dataset_dir, library, service, out_path, limit=args.limit, questions_file=args.questions
+    )
 
     print(f"Composer: {composer_id(composer)}. LLM provider: {settings.llm_provider}.")
     print(f"{'type':<10}{'total':>8}{'scored':>8}{'correct':>9}{'accuracy':>10}")
@@ -72,6 +75,25 @@ def evaluate(args: argparse.Namespace) -> int:
             f"{counts['correct']:>9}{accuracy:>10}"
         )
     print(f"Results: {out_path}")
+    return 0
+
+
+def benchmark(args: argparse.Namespace) -> int:
+    """Build the floor-plan benchmark from a downloaded dataset."""
+    dataset_dir: Path = args.dataset_dir.resolve()
+    if not (dataset_dir / "questions.jsonl").is_file():
+        print(f"No questions.jsonl in {dataset_dir}", file=sys.stderr)
+        return 2
+    out_dir: Path = args.out or Settings.from_env().data_root / "floorplans"
+    report = build_benchmark(dataset_dir, out_dir, subset_size=args.subset_size, seed=args.seed)
+
+    print(f"Questions: {report['questions']}. Images: {report['images']}. Subset: {report['subset']}.")
+    for source, counts in report["by_source"].items():
+        print(f"  {source}: {counts['questions']} questions on {counts['images']} images")
+    types = ", ".join(f"{count} {question_type}" for question_type, count in report["by_type"].items())
+    print(f"Question types: {types}.")
+    print(f"Questions left out because the drawing has no raster file: {report['dropped']}.")
+    print(f"Images copied: {report['copied']}. Benchmark: {out_dir}")
     return 0
 
 
@@ -90,7 +112,17 @@ def main(argv: list[str] | None = None) -> int:
     eval_parser.add_argument("--composer", choices=sorted(COMPOSERS))
     eval_parser.add_argument("--limit", type=int, help="stop after this many questions")
     eval_parser.add_argument("--out", type=Path, help="results file (default: var/eval-runs/)")
+    eval_parser.add_argument(
+        "--questions", default="questions.jsonl", help="question file inside the dataset folder"
+    )
     eval_parser.set_defaults(run=evaluate)
+
+    benchmark_parser = commands.add_parser("benchmark", help="build the floor-plan benchmark")
+    benchmark_parser.add_argument("dataset_dir", type=Path, help="for example data/full")
+    benchmark_parser.add_argument("--out", type=Path, help="output folder (default: data/floorplans)")
+    benchmark_parser.add_argument("--subset-size", type=int, default=500, help="questions in the subset")
+    benchmark_parser.add_argument("--seed", type=int, default=0, help="seed of the subset sample")
+    benchmark_parser.set_defaults(run=benchmark)
 
     args = parser.parse_args(argv)
     return args.run(args)

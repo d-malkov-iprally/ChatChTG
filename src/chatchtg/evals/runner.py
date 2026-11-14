@@ -13,9 +13,11 @@ from chatchtg.evals.scoring import extract_number, score
 from chatchtg.schemas import AnswerRequest
 
 
-def read_questions(dataset_dir: Path) -> Iterator[dict[str, Any]]:
-    """Yield the questions whose drawing is a raster image."""
-    with (dataset_dir / "questions.jsonl").open(encoding="utf-8") as lines:
+def read_questions(
+    dataset_dir: Path, questions_file: str = "questions.jsonl"
+) -> Iterator[dict[str, Any]]:
+    """Yield the questions of ``questions_file`` whose drawing is a raster image."""
+    with (dataset_dir / questions_file).open(encoding="utf-8") as lines:
         for line in lines:
             if line.strip():
                 question = json.loads(line)
@@ -44,14 +46,18 @@ def run_eval(
     service: AnswerService,
     out_path: Path,
     limit: int | None = None,
+    questions_file: str = "questions.jsonl",
 ) -> dict[str, dict[str, int]]:
-    """Write one JSON line per question to ``out_path``. Return counts per question type."""
+    """Write one JSON line per question to ``out_path``. Return counts per question type.
+
+    ``questions_file`` names the question file inside ``dataset_dir``.
+    """
     summary: dict[str, dict[str, int]] = {}
     document_ids: dict[str, str | None] = {}
     out_path.parent.mkdir(parents=True, exist_ok=True)
     done = 0
     with out_path.open("w", encoding="utf-8") as out:
-        for question in read_questions(dataset_dir):
+        for question in read_questions(dataset_dir, questions_file):
             if limit is not None and done >= limit:
                 break
             path = question["path"]
