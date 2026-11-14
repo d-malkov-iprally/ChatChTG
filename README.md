@@ -133,6 +133,15 @@ CHATCHTG_LLM_PROVIDER=claude uv run chatchtg serve
 CHATCHTG_LLM_PROVIDER=claude CHATCHTG_LLM_MODEL=claude-haiku-5-5 uv run chatchtg eval data/preview --limit 50
 ```
 
+To use an open-weights model through [OpenRouter](https://openrouter.ai) instead:
+
+```sh
+CHATCHTG_LLM_PROVIDER=openrouter uv run chatchtg serve
+CHATCHTG_LLM_PROVIDER=openrouter uv run chatchtg eval data/preview --sample 20 --max-cost 2
+```
+
+The default model is Kimi K3.1 Pro (`moonshotai/kimi-k3.1-pro`), served by the Modal provider. OpenRouter needs a key in `CHATCHTG_OPENROUTER_API_KEY`, and each request is billed to that key's account. `eval --judge` still uses the Claude judge, so it also needs an Anthropic key.
+
 `--sample N` answers N questions, balanced over source and question type; `--seed` changes the pick. `--max-cost` stops the run before its cost passes that many US dollars. Each result line records the token usage and the cost of its answer. If a run is interrupted, run the same command again with the same `--out` file and `--resume`: it keeps the answers and asks only the remaining questions. `--resume` needs `--out`. A question whose drawing is missing or not readable is skipped, and the run prints how many it skipped.
 
 Claude needs an Anthropic key, and each request is billed to that key's account. Keep the key in this project:
@@ -155,9 +164,11 @@ Set these in the shell or in `.env`:
 | `CHATCHTG_STATE_DIR` | `var` | where state is written |
 | `CHATCHTG_COMPOSER` | `baseline` | context composer used by the app: `baseline`, `areas` or `room-conventions` |
 | `CHATCHTG_ROOM_COUNTER` | `off` | `confident`: code answers a room-count question when it is as accurate as the LLM; `always`: code answers every room-count question; see [Room counting](#room-counting) |
-| `CHATCHTG_LLM_PROVIDER` | `fake` | LLM adapter: `fake` or `claude` |
+| `CHATCHTG_LLM_PROVIDER` | `fake` | LLM adapter: `fake`, `claude` or `openrouter` |
 | `CHATCHTG_ANTHROPIC_API_KEY` | not set | this project's Anthropic key, used instead of `ANTHROPIC_API_KEY` |
-| `CHATCHTG_LLM_MODEL` | adapter's default | model the adapter calls; for `claude` the default is `claude-opus-5-5` |
+| `CHATCHTG_OPENROUTER_API_KEY` | not set | this project's OpenRouter key; the `openrouter` adapter needs it |
+| `CHATCHTG_OPENROUTER_PROVIDER` | `modal` | the only provider that OpenRouter may route to, as an OpenRouter provider slug; set it to an empty value to let OpenRouter pick one for each request |
+| `CHATCHTG_LLM_MODEL` | adapter's default | model the adapter calls; for `claude` the default is `claude-opus-5-5`, for `openrouter` it is `moonshotai/kimi-k3.1-pro` |
 | `CHATCHTG_JUDGE_MODEL` | `claude-haiku-5-5` | model that reads the answers for `eval --judge` |
 
 ## Room counting
@@ -203,6 +214,7 @@ blobs.py   metadata.py
 - **LLM** (`llm/`): `LLMClient.complete(Context) -> Completion`. To add a provider, write one adapter and add a branch to `build_llm`.
   - `fake` (`llm/fake.py`): a deterministic stand-in for tests and offline runs.
   - `claude` (`llm/claude.py`): sends the system prompt and one user message (the images and text, in order) to the Anthropic Messages API. The completion records the model that served the request and the token usage. If the model declines a request, the API retries it on a fallback model; if that also declines, the answer says so and the run continues.
+  - `openrouter` (`llm/openrouter.py`): sends the system prompt and one user message to OpenRouter's Chat Completions API, and only to the provider in `CHATCHTG_OPENROUTER_PROVIDER`. The providers of one model differ in price and in quantization, so a fixed provider keeps runs comparable. The completion records the requested model and the token usage; reasoning tokens count as output tokens. The price in `llm/pricing.py` is the Modal price: set it again when you change the provider or the model. If the model declines a request, or spends its whole output limit on reasoning, the answer says so and the run continues. A failed request is not sent again.
 - **Judge** (`evals/judge.py`): `Judge.read(question, unit, response) -> Judgement`. It is separate from `LLMClient` because it is not the system that the eval measures.
 - **Interface** (`ui/app.py`): holds no logic. The eval runner calls the same `AnswerService`, not the UI.
 - **Schemas** (`schemas.py`): the request and response of an interaction. Add new fields as optional.

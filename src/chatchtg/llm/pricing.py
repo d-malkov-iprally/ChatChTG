@@ -17,6 +17,9 @@ PRICES: dict[str, tuple[float, float]] = {
     "claude-sonnet-5-5": (2.0, 10.0),
     "claude-sonnet-5": (2.0, 10.0),
     "claude-haiku-5-5": (0.10, 0.50),
+    # OpenRouter, at the Modal provider, on 2026-11-15. Other providers charge up to twice
+    # this, so set the price again when you change CHATCHTG_OPENROUTER_PROVIDER.
+    "moonshotai/kimi-k3.1-pro": (2.0, 10.0),
 }
 
 _INPUT_FIELDS = ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")

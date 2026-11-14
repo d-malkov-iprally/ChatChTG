@@ -49,17 +49,27 @@ def build_answer_service(
                 settings.room_counter,
             )
         room_counter = LabelRoomCounter(settings.state_dir / "ocr-cache")
+    if settings.llm_provider == "openrouter":
+        api_key = settings.openrouter_api_key
+    else:
+        api_key = settings.anthropic_api_key
     return AnswerService(
         library=library,
         composer=get_composer(composer or settings.composer),
-        llm=build_llm(settings.llm_provider, settings.llm_model, settings.anthropic_api_key),
+        llm=build_llm(
+            settings.llm_provider, settings.llm_model, api_key, settings.openrouter_provider
+        ),
         room_counter=room_counter,
         trust_room_counter=settings.room_counter == "always",
     )
 
 
 def build_judge(settings: Settings) -> Judge:
-    """Return the eval judge. With the fake LLM provider the judge is fake too."""
+    """Return the eval judge. With the fake LLM provider the judge is fake too.
+
+    Every other provider gets the Claude judge, so `eval --judge` with the openrouter
+    provider also needs an Anthropic key.
+    """
     if settings.llm_provider == "fake":
         return FakeJudge()
     return ClaudeJudge(settings.judge_model or DEFAULT_JUDGE_MODEL, settings.anthropic_api_key)

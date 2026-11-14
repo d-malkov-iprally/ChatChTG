@@ -24,6 +24,12 @@ class Settings:
     """The provider's model. None means the adapter's default."""
     anthropic_api_key: str | None = field(default=None, repr=False)
     """This project's Anthropic key. None means the Anthropic SDK's own credential lookup."""
+    openrouter_api_key: str | None = field(default=None, repr=False)
+    """This project's OpenRouter key. The openrouter provider needs it."""
+    openrouter_provider: str | None = "modal"
+    """The only provider that OpenRouter may route to. None means OpenRouter picks one for
+    each request. The providers differ in price and in quantization, so a run without a
+    fixed provider cannot be compared with another run."""
     judge_model: str | None = None
     """The model of the eval judge. None means the judge's default."""
     room_counter: str = "off"
@@ -47,6 +53,8 @@ class Settings:
             llm_provider=env.get("CHATCHTG_LLM_PROVIDER", "fake"),
             llm_model=env.get("CHATCHTG_LLM_MODEL") or None,
             anthropic_api_key=env.get("CHATCHTG_ANTHROPIC_API_KEY") or None,
+            openrouter_api_key=env.get("CHATCHTG_OPENROUTER_API_KEY") or None,
+            openrouter_provider=env.get("CHATCHTG_OPENROUTER_PROVIDER", "modal") or None,
             judge_model=env.get("CHATCHTG_JUDGE_MODEL") or None,
             room_counter=env.get("CHATCHTG_ROOM_COUNTER", "off"),
         )
