@@ -3,6 +3,8 @@ Junction demo of drawing conversational platform
 
 The challenge this answers is recorded in [docs/challenge.md](docs/challenge.md).
 
+New to the project? Read [ONBOARDING.md](ONBOARDING.md) for the rules and conventions.
+
 ## Quick start
 
 You need [uv](https://docs.astral.sh/uv/). It installs the Python version given in `.python-version`.
