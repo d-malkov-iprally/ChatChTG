@@ -101,11 +101,33 @@ Set these in the shell or in `.env`:
 |---|---|---|
 | `CHATCHTG_DATA_ROOT` | `data` | root of the downloaded datasets |
 | `CHATCHTG_STATE_DIR` | `var` | where state is written |
-| `CHATCHTG_COMPOSER` | `baseline` | context composer used by the app |
+| `CHATCHTG_COMPOSER` | `baseline` | context composer used by the app: `baseline` or `room-conventions` |
+| `CHATCHTG_ROOM_COUNTER` | `off` | `confident`: code answers a room-count question when it is as accurate as the LLM; `always`: code answers every room-count question; see [Room counting](#room-counting) |
 | `CHATCHTG_LLM_PROVIDER` | `fake` | LLM adapter: `fake` or `claude` |
 | `CHATCHTG_ANTHROPIC_API_KEY` | not set | this project's Anthropic key, used instead of `ANTHROPIC_API_KEY` |
 | `CHATCHTG_LLM_MODEL` | adapter's default | model the adapter calls; for `claude` the default is `claude-opus-5-5` |
 | `CHATCHTG_JUDGE_MODEL` | `claude-haiku-5-5` | model that reads the answers for `eval --judge` |
+
+## Room counting
+
+Almost half of the benchmark questions count rooms: bedrooms, saunas, kitchens, bathrooms, WC rooms, balconies and storeys on Finnish plans, rooms with a given label and apartments on Swiss plans. Two things exist for them. The measurements are in [docs/benchmarks/2026-11-14-room-counting.md](docs/benchmarks/2026-11-14-room-counting.md).
+
+- **The `room-conventions` composer** adds the counting conventions of Finnish plans to a room-count question, for example that the rooms of a neighbouring home on the sheet do not count. It raised the accuracy of Opus 5.5 on room questions. Every other question gets the baseline context.
+
+  ```sh
+  CHATCHTG_COMPOSER=room-conventions uv run chatchtg serve
+  uv run chatchtg eval data/floorplans --composer room-conventions --questions questions-subset.jsonl
+  ```
+
+- **The room counter** (`rooms/`) answers a room-count question in code: it reads the printed labels with OCR, maps them to the question with a lexicon, and counts apartments and storeys from shapes. It costs nothing per question, but it is less accurate than Opus 5.5 on every kind of question except apartments. So `CHATCHTG_ROOM_COUNTER=confident` uses it only for apartments, when the unit tags and the unit outlines agree; `always` uses it for every room-count question and is for runs without an LLM budget. The response then carries `method` and `evidence` (the counted labels with their boxes).
+
+  The OCR engine is Apple Vision, so the counter works on macOS only. On another system it steps aside and the LLM answers. OCR results are cached in `var/ocr-cache/`.
+
+  ```sh
+  uv run python -m chatchtg.rooms.warm data/floorplans var/ocr-cache          # read every plan once (about an hour)
+  uv run python -m chatchtg.rooms.bench data/floorplans var/ocr-cache var/rooms.jsonl
+  uv run python -m chatchtg.rooms.report data/floorplans var/rooms.jsonl      # accuracy per kind of question
+  ```
 
 ## Architecture
 
@@ -123,6 +145,7 @@ blobs.py   metadata.py
 
 - **Document storage** (`documents/blobs.py`): uploads are copied to `var/blobs/`; dataset files are referenced in place.
 - **Metadata storage** (`documents/metadata.py`): one SQLite record per document, with free-form JSON attributes.
+- **Room counter** (`rooms/`): optional. `AnswerService` asks it first; when it is not confident, or the question is not a room count, the LLM answers. See [Room counting](#room-counting).
 - **Context composer** (`context/`): a pure function `(document record, bytes, message) -> Context`. It never calls an LLM. To add a strategy, write a composer and list it in `context/registry.py`.
 - **LLM** (`llm/`): `LLMClient.complete(Context) -> Completion`. To add a provider, write one adapter and add a branch to `build_llm`.
   - `fake` (`llm/fake.py`): a deterministic stand-in for tests and offline runs.

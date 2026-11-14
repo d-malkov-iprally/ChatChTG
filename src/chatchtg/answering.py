@@ -94,7 +94,7 @@ _METHODS = {
     "labels": "counted from the labels printed on the drawing",
     "shapes": "counted from the shapes on the drawing",
     "labels+shapes": "counted from the printed labels and confirmed by the shapes",
-    "usual": "the labels could not be read, so this is the usual number for such a plan",
+    "usual": "not counted on the drawing: this is the usual number for such a plan",
 }
 
 

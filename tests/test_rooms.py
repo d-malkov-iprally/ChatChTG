@@ -121,9 +121,15 @@ def test_decide_falls_back_to_the_usual_answer_when_nothing_was_read():
     read = {"labels": 3, "room_words": 6, "typology": None}
 
     assert decide("bedroom", unread) == (1, "usual", False)
-    assert decide("bedroom", read) == (3, "labels", True)
-    assert decide("label", {"labels": 0})[2] is False
+    assert decide("bedroom", read) == (3, "labels", False)
+    assert decide("sauna", {"labels": 0, "room_words": 6, "typology": ["K", "S"]})[0] == 1
+
+
+def test_only_apartments_confirmed_by_two_methods_are_confident():
     assert decide("apartments", {"labels": 4, "shapes": 4}) == (4, "labels+shapes", True)
+    assert decide("apartments", {"labels": 4, "shapes": 3}) == (4, "labels", False)
+    assert decide("apartments", {"labels": 0, "shapes": 3}) == (3, "shapes", False)
+    assert decide("label", {"labels": 2})[2] is False
 
 
 class FixedCounter:
@@ -172,3 +178,27 @@ def test_other_questions_go_to_the_llm(library):
     response = service.answer(AnswerRequest(document_id=document.id, message="How many doors?"))
 
     assert response.text == "7"
+
+
+def test_room_conventions_are_added_to_finnish_room_counts_only(library):
+    from chatchtg.context.baseline import BaselineComposer as Baseline
+    from chatchtg.context.composer import ComposerInput
+    from chatchtg.context.room_conventions import RoomConventionsComposer
+
+    document = library.add_upload(PNG, "plan.png")
+
+    def compose(composer, message):
+        return composer.compose(ComposerInput(document=document, content=PNG, message=message))
+
+    kitchens = "How many kitchens (including kitchenettes) are on this floor plan?"
+    context = compose(RoomConventionsComposer(), kitchens)
+    assert "Do not count" in context.parts[1].text  # the neighbouring home
+    assert context.parts[-1].text == kitchens
+    storeys = compose(RoomConventionsComposer(), "How many floors (storeys) does this floor plan show?")
+    assert "outbuilding" in storeys.parts[1].text
+    for other in (
+        "How many windows are shown on this floor plan?",
+        "How many apartments (residential units) are shown on this floor plan?",
+        "How many rooms labelled 'Bad' are there on this floor?",
+    ):
+        assert compose(RoomConventionsComposer(), other) == compose(Baseline(), other)

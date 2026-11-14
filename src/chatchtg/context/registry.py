@@ -2,8 +2,9 @@
 
 from chatchtg.context.baseline import BaselineComposer
 from chatchtg.context.composer import Composer
+from chatchtg.context.room_conventions import RoomConventionsComposer
 
-COMPOSERS: dict[str, Composer] = {c.name: c for c in (BaselineComposer(),)}
+COMPOSERS: dict[str, Composer] = {c.name: c for c in (BaselineComposer(), RoomConventionsComposer())}
 
 
 def get_composer(name: str) -> Composer:

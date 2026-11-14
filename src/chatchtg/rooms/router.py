@@ -82,37 +82,40 @@ def signals(content: bytes, question: RoomQuestion, cache_dir: Path | None = Non
 
 
 def decide(kind: str, s: Signals) -> tuple[int, str, bool]:
-    """Return (count, method, confident) for one kind of question."""
+    """Return (count, method, confident) for one kind of question.
+
+    ``confident`` is True only where the count was measured to be as accurate as the LLM:
+    apartments, when the unit tags and the unit outlines give the same number (exact on all
+    1,932 such questions of the benchmark). Every other count is less accurate than the LLM
+    (docs/benchmarks/2026-11-14-room-counting.md), so it is a fallback, not an answer to prefer.
+    """
     labels = s["labels"]
     if kind == "label":
-        # Each room prints its label once. No label read means the reading failed.
-        return labels, "labels", labels > 0
+        return labels, "labels", False
     if kind == "apartments":
         shapes = s["shapes"]
         if labels and labels == shapes:
             return labels, "labels+shapes", True
         if labels:
-            return labels, "labels", shapes == 0
+            return labels, "labels", False
         return shapes, "shapes", False
     if kind == "storeys":
-        return s["shapes"], "shapes", s["shapes"] == labels
-    read_ok = s["room_words"] >= 2
-    typology = s.get("typology") or []
-    if kind == "kitchen":
-        # Nearly every home has one kitchen, and its label is often missed.
-        return max(1, labels) if read_ok else 1, "labels" if labels > 1 else "usual", labels >= 1
+        return s["shapes"], "shapes", False
     if kind == "bathroom":
-        return 1, "usual", labels == 1
+        return 1, "usual", False
+    read_ok = s["room_words"] >= 2  # were the room labels of this plan read at all?
+    if kind == "kitchen":
+        # Nearly every home has one kitchen. Its label is often missed, and a second label
+        # is usually the kitchen of a neighbouring home.
+        return 1, "usual", False
     if kind == "sauna":
-        if labels == 0 and "S" in typology:
-            return 1, "labels", True
-        if not read_ok:
-            return 1, "usual", False
-        return labels, "labels", labels > 0 or bool(typology)
+        if labels == 0 and "S" in (s.get("typology") or []):
+            return 1, "labels", False
+        return (labels, "labels", False) if read_ok else (1, "usual", False)
     if kind == "bedroom":
-        return (labels, "labels", True) if read_ok else (1, "usual", False)
+        return (labels, "labels", False) if read_ok else (1, "usual", False)
     # wc, balcony
-    return (labels, "labels", True) if read_ok else (0, "usual", False)
+    return (labels, "labels", False) if read_ok else (0, "usual", False)
 
 
 def solve(content: bytes, message: str, cache_dir: Path | None = None) -> Finding | None:
