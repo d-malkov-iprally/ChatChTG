@@ -18,6 +18,8 @@ from chatchtg.schemas import AnswerRequest, AnswerResponse
 
 ROOM_COUNTER_MODEL = "room-counter"
 """The model name of an answer that code made without an LLM call."""
+AREA_PIPELINE_MODEL = "area-pipeline"
+"""The model name of an area answer that code computed and stated without an LLM call."""
 
 
 class RoomCounter(Protocol):
@@ -69,7 +71,7 @@ class AnswerService:
             completion = Completion(text=_finding_text(finding), model=ROOM_COUNTER_MODEL)
         else:
             finding = None
-            completion = self._llm.complete(context)
+            completion = self._state(context)
         response = AnswerResponse(
             text=completion.text,
             composer=composer_id(self._composer),
@@ -78,6 +80,14 @@ class AnswerService:
             evidence=finding.evidence if finding else [],
         )
         return AnswerTrace(response=response, context=context, completion=completion)
+
+    def _state(self, context: Context) -> Completion:
+        """The answer text for a context: the statement that code wrote, when the context
+        carries one, and the LLM's completion otherwise."""
+        computed = context.computed
+        if computed is not None and computed.statement:
+            return Completion(text=computed.statement, model=AREA_PIPELINE_MODEL)
+        return self._llm.complete(context)
 
 
 _SUBJECTS = {

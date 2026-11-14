@@ -5,6 +5,7 @@ import pytest
 from chatchtg.answering import AnswerService
 from chatchtg.cli import main
 from chatchtg.context.baseline import BaselineComposer
+from chatchtg.context.types import ComputedAnswer, Context, TextPart
 from chatchtg.evals.runner import UnknownPriceError, run_eval
 from chatchtg.evals.scoring import extract_number, score
 from chatchtg.llm.client import Completion
@@ -182,6 +183,36 @@ def test_run_eval_with_a_cost_limit_needs_a_known_price(dataset, library, tmp_pa
         run_eval(dataset, library, service, out_path, max_cost=1.0)
 
     assert len(out_path.read_text().splitlines()) == 1
+
+
+class StatedComposer:
+    """A composer whose context carries an answer that code computed and stated."""
+
+    name = "stated"
+    version = 1
+
+    def compose(self, request):
+        return Context(
+            system="Not sent.",
+            parts=[TextPart(text=request.message)],
+            computed=ComputedAnswer(value=50.004, basis="printed", statement="Area of room 1.\n\nAnswer: 50.00 m²"),
+        )
+
+
+def test_a_code_stated_answer_costs_nothing_and_passes_a_cost_limit(dataset, library, tmp_path):
+    # The LLM has no price: a call to it would raise UnknownPriceError under a cost limit.
+    service = AnswerService(library, StatedComposer(), MeteredLLM(model="unknown-model"))
+    out_path = tmp_path / "result.jsonl"
+
+    run = run_eval(dataset, library, service, out_path, max_cost=1.0)
+
+    rows = [json.loads(line) for line in out_path.read_text().splitlines()]
+    assert cost_usd("area-pipeline", {}) == 0
+    assert len(rows) == 3
+    assert all(row["model"] == "area-pipeline" and row["cost_usd"] == 0 for row in rows)
+    assert rows[1]["correct"] is True and rows[1]["extracted_value"] == 50.0
+    assert rows[1]["context"]["computed"] == {"value": 50.004, "unit": "m2", "basis": "printed", "doubts": []}
+    assert run.cost_usd == 0 and run.stopped_for_cost is False
 
 
 def test_run_eval_sample_is_balanced_and_repeatable(dataset, library, service, tmp_path):
