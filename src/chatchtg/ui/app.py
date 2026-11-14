@@ -70,11 +70,14 @@ def inject_styles() -> None:
         .primary-nav span { color: #c5cad9; padding: 0.55rem 1rem; border-radius: 0.35rem; font-size: 0.94rem; }
         .primary-nav .active { color: #fff; background: linear-gradient(135deg, #62558f, #413d65); box-shadow: inset 0 0 0 1px rgba(222, 210, 255, 0.15); }
         div[data-testid="stSegmentedControl"] { margin: 0.05rem 0 0.6rem; }
-        div[data-testid="stSegmentedControl"] button {
-            color: #edf1fa; background: rgba(15, 21, 33, 0.78); border-color: rgba(181, 192, 218, 0.18);
+        div[data-testid="stSegmentedControl"] label {
+            color: #edf1fa !important; background: rgba(15, 21, 33, 0.78) !important;
+            border-color: rgba(181, 192, 218, 0.18) !important;
         }
-        div[data-testid="stSegmentedControl"] button[aria-pressed="true"] {
-            background: rgba(115, 85, 199, 0.62); border-color: rgba(191, 167, 255, 0.7);
+        div[data-testid="stSegmentedControl"] label p { color: inherit !important; }
+        div[data-testid="stSegmentedControl"] label:has(input:checked) {
+            color: #fff !important; background: linear-gradient(135deg, #8064ca, #604aa8) !important;
+            border-color: #bca5fb !important; box-shadow: 0 0 0 1px rgba(188, 165, 251, 0.22);
         }
         [data-testid="stSelectbox"] label,
         [data-testid="stSelectbox"] label p { color: #e9edf7 !important; }
