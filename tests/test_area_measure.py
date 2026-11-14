@@ -98,3 +98,14 @@ def test_an_image_without_free_pixels_has_no_rooms():
 
     assert rooms[0].area_m2 is None
     assert rooms[0].flags == ["no-region"]
+
+
+def test_debug_receives_the_component_owners():
+    image = room_with_walls().image()
+    debug: dict = {}
+    [room] = measure_rooms(image, [(180, 140)], PPM, debug=debug)
+    [plain] = measure_rooms(image, [(180, 140)], PPM)
+
+    assert set(debug) == {"labels", "stats", "owner", "neutral", "graph", "exterior", "raster", "seed_of"}
+    assert debug["owner"][debug["seed_of"][0]] == 0
+    assert room.area_m2 == plain.area_m2

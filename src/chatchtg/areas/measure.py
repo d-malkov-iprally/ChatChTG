@@ -576,8 +576,14 @@ def measure_rooms(
     pixels_per_metre: float,
     text_boxes: list[tuple[float, float, float, float]] = (),
     raster: Raster | None = None,
+    debug: dict | None = None,
 ) -> list[RoomMeasure]:
-    """Measure the room around each seed point. ``image`` is an RGB array."""
+    """Measure the room around each seed point. ``image`` is an RGB array.
+
+    A ``debug`` dict receives the intermediate state, for error analysis: "raster",
+    "labels" and "stats" (the free components), "graph" (their contacts), "exterior",
+    "neutral", "seed_of" (the component of each seed) and "owner" (component -> room).
+    """
     raster = raster or classify(image, text_boxes, pixels_per_metre)
     height, width = raster.grey.shape
     free = (~raster.ink).astype(np.uint8)
@@ -670,6 +676,12 @@ def measure_rooms(
         if new:
             owner.update(new)
             changed = True
+
+    if debug is not None:
+        debug.update(
+            raster=raster, labels=labels, stats=stats, graph=graph, exterior=exterior,
+            neutral=neutral, seed_of=seed_of, owner=owner,
+        )
 
     members: dict[int, list[int]] = {}
     for component, index in owner.items():

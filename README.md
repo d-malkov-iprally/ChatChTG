@@ -104,9 +104,13 @@ To score the pipeline without any LLM call:
 uv sync --dev                                   # ezdxf and shapely, for the ground truth
 uv run python scripts/build_room_truth.py       # room areas from the DXF twins, into var/room-truth
 uv run python scripts/eval_areas.py --plans 100 # answers the area questions of 100 plans in code
+uv run python scripts/eval_areas.py --stems docs/benchmarks/stems/heldout-200.txt --refresh   # of exactly these plans
+uv run python scripts/eval_measure.py --stems docs/benchmarks/stems/tune-200.txt   # the measurer alone, with the failure pattern of each wrong room
 uv run python scripts/eval_labels.py 20 20      # the label reader alone
 uv run python scripts/eval_membership.py        # the aggregation rules and apartment membership alone
 ```
+
+`eval_measure.py` takes the label positions from the DXF truth, so every error it reports is an error of the measurer; `--compare OLD.jsonl` lists the rooms that changed against an earlier run. The lists in [docs/benchmarks/stems](docs/benchmarks/stems/) split the plans of each scale into the 20 the measurer was tuned on and the rest. `eval_areas.py` keeps each analysis in `var/area-cache` by the plan name: pass `--refresh` after a change to the pipeline. Both scripts read the plans from `CHATCHTG_DATA_ROOT`.
 
 The DXF files are used only to score and to explain errors, never to answer ([ADR 0003](docs/ADR/0003-floor-plans-only.md)). Results are in [docs/benchmarks](docs/benchmarks/).
 
