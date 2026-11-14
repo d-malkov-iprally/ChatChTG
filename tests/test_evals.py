@@ -6,6 +6,7 @@ from chatchtg.answering import AnswerService
 from chatchtg.cli import main
 from chatchtg.context.baseline import BaselineComposer
 from chatchtg.context.types import ComputedAnswer, Context, TextPart
+from chatchtg.evals.area_statement import report
 from chatchtg.evals.runner import UnknownPriceError, run_eval
 from chatchtg.evals.scoring import extract_number, score
 from chatchtg.llm.client import Completion
@@ -294,3 +295,41 @@ def test_cli_eval_reports_an_unknown_setting(dataset, tmp_path, monkeypatch, cap
 
     assert main(["eval", str(dataset)]) == 2
     assert "Unknown room counter mode" in capsys.readouterr().err
+
+
+def test_the_statement_report_counts_only_code_stated_rows():
+    rows = [
+        {"type": "area", "model": "area-pipeline", "expected": 20.6, "correct": True,
+         "context": {"computed": {"value": 20.627}}, "path": "a.png", "question": "q1", "cost_usd": 0},
+        {"type": "area", "model": "fake", "expected": 5.0, "correct": False,
+         "context": {}, "path": "b.png", "question": "q2", "cost_usd": 0},
+        {"type": "count", "model": "fake", "expected": 3, "correct": False,
+         "context": {}, "path": "c.png", "question": "q3", "cost_usd": 0},
+    ]  # fmt: skip
+    compare = [
+        {"type": "area", "path": "a.png", "question": "q1", "correct": False, "cost_usd": 0.004},
+        {"type": "area", "path": "b.png", "question": "q2", "correct": True, "cost_usd": 0.04},
+    ]
+
+    result = report(rows, compare)
+
+    assert (result["stated"], result["stated_correct"], result["value_correct"]) == (1, 1, 1)
+    assert result["not_answered"] == 1
+    assert result["compare_correct"] == 0 and result["compare_cost_usd"] == pytest.approx(0.004)
+    assert [row["question"] for row in result["gained"]] == ["q1"] and result["lost"] == []
+    assert result["text_lost_the_value"] == [] and result["compare_missing"] == 0
+
+
+def test_the_statement_report_names_a_row_whose_text_lost_a_right_value():
+    rows = [
+        {"type": "area", "model": "area-pipeline", "expected": 8.48, "correct": False,
+         "context": {"computed": {"value": 8.3128}}, "path": "a.png", "question": "q1", "cost_usd": 0},
+        {"type": "area", "model": "area-pipeline", "expected": 30.0, "correct": False,
+         "context": {"computed": {"value": 20.0}}, "path": "a.png", "question": "q2", "cost_usd": 0},
+    ]  # fmt: skip
+
+    result = report(rows)
+
+    assert (result["stated"], result["stated_correct"], result["value_correct"]) == (2, 0, 1)
+    assert [row["question"] for row in result["text_lost_the_value"]] == ["q1"]
+    assert "compare_correct" not in result
