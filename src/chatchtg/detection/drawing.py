@@ -5,6 +5,7 @@ from __future__ import annotations
 from PIL import Image, ImageDraw, ImageFont
 
 from chatchtg.detection.detector import Detection
+from chatchtg.detection.images import to_rgb
 
 # Colours that stay visible on a white drawing with black lines.
 PALETTE = ["#e6194b", "#1f77b4", "#2ca02c", "#f58231", "#911eb4", "#008080", "#9a6324", "#d62790"]
@@ -15,7 +16,7 @@ def draw_detections(image: Image.Image, detections: list[Detection]) -> Image.Im
 
     Each label gets its own colour, in the order in which the labels first occur.
     """
-    annotated = image.convert("RGB")
+    annotated = to_rgb(image)
     draw = ImageDraw.Draw(annotated)
     # Scale the line and the text with the image: the app shows large drawings scaled down.
     scale = max(annotated.size) / 1000

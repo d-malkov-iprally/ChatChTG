@@ -86,7 +86,7 @@ def decide(kind: str, s: Signals) -> tuple[int, str, bool]:
 
     ``confident`` is True only where the count was measured to be as accurate as the LLM:
     apartments, when the unit tags and the unit outlines give the same number (exact on all
-    1,932 such questions of the benchmark). Every other count is less accurate than the LLM
+    1,970 such questions of the benchmark). Every other count is less accurate than the LLM
     (docs/benchmarks/2026-11-14-room-counting.md), so it is a fallback, not an answer to prefer.
     """
     labels = s["labels"]

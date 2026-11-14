@@ -74,6 +74,9 @@ class RoomMeasure:
     box: tuple[int, int, int, int] | None = None
     shade: float | None = None
     """Median grey value of the room's empty floor: 255 is white, an outdoor room is darker."""
+    shares_with: int | None = None
+    """Index of the room whose region this room's label also lies in. That room's area is
+    the area of the whole region, this room included."""
 
 
 @dataclass
@@ -582,7 +585,8 @@ def measure_rooms(
     sizes = stats[:, cv2.CC_STAT_AREA]
     border = np.unique(np.concatenate([labels[0], labels[-1], labels[:, 0], labels[:, -1]]))
     exterior = set(border.tolist()) - {0}
-    exterior.add(int(np.argmax(sizes[1:]) + 1))
+    if count > 1:  # an image without any free pixel has only the background component
+        exterior.add(int(np.argmax(sizes[1:]) + 1))
 
     contacts = _contacts(labels, raster)
     graph: dict[int, dict[int, tuple[int, int]]] = {}
@@ -599,7 +603,9 @@ def measure_rooms(
             rooms[index].flags.append("no-region")
         elif component in owner:
             rooms[index].flags.append("shared-region")
-            rooms[owner[component]].flags.append("shared-region")
+            rooms[index].shares_with = owner[component]
+            if "shared-region" not in rooms[owner[component]].flags:
+                rooms[owner[component]].flags.append("shared-region")
         else:
             owner[component] = index
 

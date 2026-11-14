@@ -12,6 +12,7 @@ import io
 import json
 import re
 import sys
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,10 @@ Token = dict[str, Any]
 
 class OcrUnavailableError(RuntimeError):
     """Apple Vision cannot be loaded on this machine."""
+
+
+class OcrFailedError(RuntimeError):
+    """Apple Vision could not read this image."""
 
 
 def available() -> bool:
@@ -50,13 +55,20 @@ def read_plan(content: bytes, profile: str, cache_dir: Path | None = None) -> Oc
         digest = hashlib.sha256(content).hexdigest()
         cache_file = cache_dir / f"{digest}-{profile}-v{_VERSION}.json"
         if cache_file.is_file():
-            return json.loads(cache_file.read_text(encoding="utf-8"))
+            try:
+                cached = json.loads(cache_file.read_text(encoding="utf-8"))
+            except ValueError:  # a file that was cut off: read the drawing again
+                cached = None
+            if isinstance(cached, dict) and "tokens" in cached:
+                return cached
     image = Image.open(io.BytesIO(content)).convert("RGB")
     result = _read_finnish(image) if profile == "finnish" else _read_swiss(image)
     result |= {"W": image.width, "H": image.height, "profile": profile}
     if cache_file is not None:
         cache_file.parent.mkdir(parents=True, exist_ok=True)
-        temporary = cache_file.with_suffix(".tmp")
+        # A name of its own per writer: the same drawing can be in the dataset under two
+        # paths, and two workers must not write one temporary file.
+        temporary = cache_file.with_name(f"{cache_file.name}.{uuid.uuid4().hex}.tmp")
         temporary.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
         temporary.replace(cache_file)
     return result
@@ -201,11 +213,17 @@ def _vision(image: Image.Image, langs: tuple[str, ...]) -> list[Token]:
     request.setUsesLanguageCorrection_(False)
     request.setRecognitionLanguages_(list(langs))
     request.setMinimumTextHeight_(0.0)
-    handler.performRequests_error_([request], None)
+    done, error = handler.performRequests_error_([request], None)
+    if not done:
+        # Raised, so that an empty result is not stored in the cache as what the plan says.
+        raise OcrFailedError(f"Apple Vision could not read the image: {error}")
     width, height = image.size
     tokens = []
     for observation in request.results() or []:
-        candidate = observation.topCandidates_(1)[0]
+        candidates = observation.topCandidates_(1)
+        if not candidates:
+            continue
+        candidate = candidates[0]
         bounds = observation.boundingBox()
         x, y = bounds.origin.x, bounds.origin.y
         w, h = bounds.size.width, bounds.size.height

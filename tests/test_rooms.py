@@ -202,3 +202,49 @@ def test_room_conventions_are_added_to_finnish_room_counts_only(library):
         "How many rooms labelled 'Bad' are there on this floor?",
     ):
         assert compose(RoomConventionsComposer(), other) == compose(Baseline(), other)
+
+
+def test_a_misread_unit_tag_is_not_one_more_apartment():
+    assert lexicon.swiss_apartments_count(plan(token("Whg. A", 100, 100), token("Whg. Al", 500, 100)))[0] == 1
+    read = plan(token("App. A", 100, 100), token("App. B", 500, 100), token("App. t", 100, 500))
+    assert lexicon.swiss_apartments_count(read)[0] == 2
+
+
+def test_a_swiss_label_read_in_two_tiles_is_counted_once():
+    read = plan(token("Bad", 100, 100, src="a"), token("Bad", 101, 101, src="a"))
+
+    assert len(lexicon.swiss_label_hits(read, "Bad")) == 1
+
+
+def test_glazed_alone_is_not_a_balcony():
+    assert lexicon.count_cubi(plan(token("LASITETTU TERASSI", 100, 100), token("OH", 400, 400)), "balcony")[0] == 0
+    assert lexicon.count_cubi(plan(token("LASITETTU PARVEKE", 100, 100), token("OH", 400, 400)), "balcony")[0] == 1
+
+
+def test_a_dressing_room_is_not_a_bathroom():
+    assert not lexicon.fuzzy_word("PUKUHUONE", "bathroom")
+    assert lexicon.fuzzy_word("PESUHUONF", "bathroom")
+
+
+def test_the_type_string_is_read_with_a_cyrillic_three():
+    assert lexicon.typology(plan(token("ЗН+K+S", 100, 900)))["rooms"] == 3
+
+
+def test_a_cut_off_cache_file_is_read_again(tmp_path, monkeypatch):
+    import hashlib
+    import io
+
+    from PIL import Image
+
+    from chatchtg.rooms import ocr
+
+    buffer = io.BytesIO()
+    Image.new("RGB", (8, 8), "white").save(buffer, format="PNG")
+    content = buffer.getvalue()
+    monkeypatch.setattr(ocr, "_read_swiss", lambda image: {"tokens": []})
+    cache_file = tmp_path / f"{hashlib.sha256(content).hexdigest()}-swiss-v{ocr._VERSION}.json"
+    cache_file.write_text('{"tokens": [')
+
+    assert ocr.read_plan(content, "swiss", tmp_path)["tokens"] == []
+    assert ocr.read_plan(content, "swiss", tmp_path)["W"] == 8
+    assert [path.name for path in tmp_path.iterdir()] == [cache_file.name]

@@ -222,3 +222,44 @@ def test_run_eval_resume_keeps_answers_and_asks_only_the_rest(dataset, library, 
     assert [json.loads(line)["question"] for line in lines] == ["Windows?", "Area?", "Room name?"]
     assert sum(counts["total"] for counts in run.summary.values()) == 3
     assert run.cost_usd == pytest.approx(18.0)
+
+
+def test_run_eval_resume_drops_a_line_that_was_cut_off(dataset, library, tmp_path):
+    out_path = tmp_path / "result.jsonl"
+    service = AnswerService(library, BaselineComposer(), FakeLLM(reply="The answer is 4"))
+    run_eval(dataset, library, service, out_path)
+    complete = out_path.read_text().splitlines(keepends=True)
+    out_path.write_text("".join(complete[:2]) + complete[2][:20])
+
+    run = run_eval(dataset, library, service, out_path, resume=True)
+
+    rows = [json.loads(line) for line in out_path.read_text().splitlines()]
+    assert [row["question"] for row in rows] == ["Windows?", "Area?", "Room name?"]
+    assert sum(counts["total"] for counts in run.summary.values()) == 3
+
+
+def test_run_eval_counts_the_questions_it_skips(dataset, library, service, tmp_path):
+    question = {"path": "data/cubicasa5k/gone.png", "question": "Windows?", "answer": 4, "type": "count"}
+    with (dataset / "questions.jsonl").open("a") as out:
+        out.write(json.dumps(question) + "\n")
+
+    run = run_eval(dataset, library, service, tmp_path / "result.jsonl")
+
+    assert run.skipped == 1
+    assert sum(counts["total"] for counts in run.summary.values()) == 3
+
+
+def test_cli_eval_refuses_resume_without_out(dataset, tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CHATCHTG_STATE_DIR", str(tmp_path / "state"))
+
+    assert main(["eval", str(dataset), "--resume"]) == 2
+    assert "--resume needs --out" in capsys.readouterr().err
+    assert not (tmp_path / "state" / "eval-runs").exists()
+
+
+def test_cli_eval_reports_an_unknown_setting(dataset, tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CHATCHTG_STATE_DIR", str(tmp_path / "state"))
+    monkeypatch.setenv("CHATCHTG_ROOM_COUNTER", "sometimes")
+
+    assert main(["eval", str(dataset)]) == 2
+    assert "Unknown room counter mode" in capsys.readouterr().err

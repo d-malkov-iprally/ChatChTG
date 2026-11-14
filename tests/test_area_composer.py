@@ -117,3 +117,63 @@ def test_an_image_the_pipeline_cannot_read_is_composed_as_in_the_baseline(librar
 
     assert context.system == SYSTEM_PROMPT
     assert isinstance(context.parts[0], ImagePart)
+
+
+def test_a_measured_area_with_a_guessed_scale_goes_to_the_llm_with_the_image(library, plan):
+    result = analysis([room("1.01", "Küche", 8.127)])
+    result.scale_read = False
+    plan(result)
+
+    context = compose(library, "What is the net floor area of room 1.01 ('Küche') in m²?")
+
+    assert context.system == SYSTEM_PROMPT
+    assert isinstance(context.parts[0], ImagePart)
+    assert "scale not read, 1:100 assumed" in context.parts[1].text
+
+
+def test_a_printed_area_does_not_need_the_scale(library, plan):
+    result = analysis([room("1.01", "Küche", 8.127, method="printed")])
+    result.scale_read = False
+    plan(result)
+
+    context = compose(library, "What is the net floor area of room 1.01 ('Küche') in m²?")
+
+    assert context.system == AREA_SYSTEM_PROMPT
+
+
+def test_rooms_measured_as_one_region_are_listed_once(library, plan):
+    hall, corridor = room("1.01", "Zimmer", 15.0), room("1.02", "Korridor", None)
+    hall.region = corridor.region = "1.01"
+    plan(analysis([hall, corridor, room("1.03", "Bad", 5.0)]))
+
+    context = compose(library, "What is the net floor area of apartment A in m²?")
+
+    assert context.system == AREA_SYSTEM_PROMPT
+    assert "1.02 Korridor: included in the area of 1.01" in context.parts[0].text
+    assert "Result: 20.00 m²" in context.parts[0].text
+
+
+def test_a_failure_of_the_pipeline_is_logged(library, plan, caplog):
+    plan(RuntimeError("broken"))
+
+    context = compose(library, "What is the net floor area of room 1.01 ('Küche') in m²?")
+
+    assert context.system == SYSTEM_PROMPT
+    assert "The area pipeline failed on plan.png" in caplog.text
+
+
+def test_only_the_first_room_of_a_shared_region_keeps_the_measured_area():
+    from chatchtg.areas.pipeline import _join_shared_regions
+
+    rooms = [room("1.01", "Zimmer", 15.0), room("1.02", "Korridor", 10.0), room("1.03", "Bad", 5.0)]
+    _join_shared_regions(rooms, [None, 0, None])
+
+    assert [(r.area, r.method, r.region) for r in rooms] == [
+        (15.0, "measured", "1.01"), (None, None, "1.01"), (5.0, "measured", None),
+    ]
+
+    rooms = [room("1.01", "Zimmer", 15.0, method="printed"), room("1.02", "Korridor", 10.0)]
+    _join_shared_regions(rooms, [None, 0])
+
+    # The first room prints its own area, so the region's area cannot stand for both.
+    assert [(r.area, r.method, r.region) for r in rooms] == [(15.0, "printed", None), (None, None, None)]

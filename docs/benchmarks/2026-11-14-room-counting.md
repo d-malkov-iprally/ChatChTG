@@ -124,6 +124,24 @@ counting for apartments and storeys. Scores on every room question of the benchm
   the benchmark. `CHATCHTG_ROOM_COUNTER=confident` answers those in code and saves the most
   expensive kind of room question ($0.025 with Opus). It does not change the score.
 
+### Update of 2026-11-15: three label rules corrected
+
+Measured again on all 55,814 room questions with `rooms.bench` and `rooms.report`, on the
+same OCR cache. The other kinds did not change.
+
+| Kind | Split | Before | After |
+|---|---|---|---|
+| Apartments | tuned / dev / test | 97.8% / 95.1% / 96.1% | 99.0% / 99.0% / 98.2% |
+| Balconies | tuned / dev / test | 82.2% / 85.1% / 86.4% | 86.3% / 86.9% / 88.5% |
+| Rooms with a given label | tuned / dev / test | 95.0% / 96.5% / 96.0% | 95.8% / 97.0% / 96.5% |
+
+- A unit tag is one capital letter. "Whg. Al", a misread "Whg. A)", was a unit of its own.
+- A label read in two overlapping tiles of one pass was counted twice.
+- `LASITETTU` (glazed) alone counted as a balcony, also in "LASITETTU TERASSI".
+
+The count that tags and outlines agree on is now right on all 1,970 such questions (before:
+1,926). These numbers are for the room counter alone; no LLM run was repeated.
+
 ## What was not built
 
 | Direction of the notes | Status |

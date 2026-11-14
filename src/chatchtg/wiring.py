@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from chatchtg.answering import AnswerService
 from chatchtg.config import Settings
 from chatchtg.context.registry import get_composer
@@ -11,9 +13,12 @@ from chatchtg.documents.metadata import SqliteMetadataStore
 from chatchtg.evals.judge import DEFAULT_JUDGE_MODEL, ClaudeJudge, FakeJudge, Judge
 from chatchtg.extractions.store import LocalExtractionStore
 from chatchtg.llm.client import build_llm
+from chatchtg.rooms import ocr
 from chatchtg.rooms.counter import LabelRoomCounter
 
 ROOM_COUNTER_MODES = ("off", "confident", "always")
+
+logger = logging.getLogger(__name__)
 
 
 def build_library(settings: Settings) -> DocumentLibrary:
@@ -37,6 +42,12 @@ def build_answer_service(
         )
     room_counter = None
     if settings.room_counter != "off":
+        if not ocr.available():
+            logger.warning(
+                "CHATCHTG_ROOM_COUNTER=%s has no effect on this machine: the room counter needs "
+                "Apple Vision (macOS). The LLM answers every question.",
+                settings.room_counter,
+            )
         room_counter = LabelRoomCounter(settings.state_dir / "ocr-cache")
     return AnswerService(
         library=library,

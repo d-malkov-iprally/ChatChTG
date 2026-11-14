@@ -5,13 +5,20 @@
 
 from __future__ import annotations
 
+import logging
 import re
 import uuid
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Protocol
 
+from pydantic import ValidationError
+
 from chatchtg.extractions.models import Extraction, Item, ItemRef
+
+logger = logging.getLogger(__name__)
+_DOCUMENT_ID = re.compile(r"[0-9a-f]{64}")
+_PRODUCER = re.compile(r"[a-z0-9][a-z0-9-]*")
 
 _FILE = re.compile(r"(?P<producer>[a-z0-9][a-z0-9-]*)@(?P<version>[1-9][0-9]*)\.json")
 
@@ -62,7 +69,7 @@ class LocalExtractionStore:
 
     def list(self, document_id: str) -> list[Extraction]:
         loaded = (
-            self._load(self._path(document_id, producer, version))
+            self._load_or_skip(self._path(document_id, producer, version))
             for producer, version in sorted(self._stored(document_id))
         )
         return [extraction for extraction in loaded if extraction is not None]
@@ -71,7 +78,7 @@ class LocalExtractionStore:
         if not self._root.is_dir():
             return
         for folder in sorted(self._root.iterdir()):
-            extraction = self._load(folder / f"{producer}@{version}.json")
+            extraction = self._load_or_skip(folder / f"{producer}@{version}.json")
             if extraction is not None:
                 yield extraction
 
@@ -82,15 +89,31 @@ class LocalExtractionStore:
         return extraction.item(ref.item_id) if extraction else None
 
     def _path(self, document_id: str, producer: str, version: int) -> Path:
-        return self._root / document_id / f"{producer}@{version}.json"
+        # The names become a path. Anything else than a hash and a producer name, such as
+        # "../x", would read a file outside the store.
+        if _DOCUMENT_ID.fullmatch(document_id) is None:
+            raise ValueError(f"Not a document ID: {document_id!r}")
+        if _PRODUCER.fullmatch(producer) is None:
+            raise ValueError(f"Not a producer name: {producer!r}")
+        return self._root / document_id / f"{producer}@{int(version)}.json"
 
     def _stored(self, document_id: str) -> list[tuple[str, int]]:
         """The (producer, version) pairs that have a file for this document."""
+        if _DOCUMENT_ID.fullmatch(document_id) is None:
+            raise ValueError(f"Not a document ID: {document_id!r}")
         folder = self._root / document_id
         if not folder.is_dir():
             return []
         matches = (_FILE.fullmatch(path.name) for path in folder.iterdir())
         return [(m["producer"], int(m["version"])) for m in matches if m]
+
+    def _load_or_skip(self, path: Path) -> Extraction | None:
+        """Load a file for a listing. One file that cannot be read must not hide the others."""
+        try:
+            return self._load(path)
+        except ValidationError as error:
+            logger.warning("Skipped the extraction file %s: %s", path, error)
+            return None
 
     @staticmethod
     def _load(path: Path) -> Extraction | None:

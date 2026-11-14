@@ -129,3 +129,24 @@ three changes:
 - **Stairs next to a corridor without a wall** are sometimes split wrongly, because the tread
   lines hide the separator.
 - **A room polygon that overlaps a wall in the data** cannot be recovered from the image.
+
+## Update of 2026-11-15: rooms measured as one region
+
+When no wall is found between two labelled rooms, the pipeline now counts their region once
+in a total, and gives no answer of its own when it cannot tell the rooms apart (the LLM then
+gets the image and the room table). Before, a part of the region was counted twice.
+
+Measured with `scripts/eval_areas.py --plans 100` (seed 0, 1,142 area questions, no LLM call),
+on the code before and after the change:
+
+| | Before | After |
+|---|---|---|
+| Answered in code and correct | 1,016 | 1,012 |
+| Answered in code and wrong | 120 | 108 |
+| Not answered in code (goes to the LLM) | 6 | 22 |
+| Correct among the answers the pipeline is confident of | 91.9% | 92.3% |
+
+Of the 16 questions that now go to the LLM and did not before, 12 had a wrong answer and 4 a right one.
+No question changed from right to wrong in code. On `site10161_bldg14756_floor39134` (not in
+this sample) the apartment total went from 68.14 m² to 57.70 m², against a reference of 57.87.
+No LLM run was repeated for this update.

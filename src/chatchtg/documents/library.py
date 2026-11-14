@@ -31,6 +31,10 @@ class DocumentNotFoundError(LookupError):
     """No document has this ID."""
 
 
+class DocumentChangedError(RuntimeError):
+    """The stored bytes are not the ones that were registered."""
+
+
 def sniff_media_type(data: bytes) -> str:
     for media_type, signature in SUPPORTED_MEDIA_TYPES.items():
         if data.startswith(signature):
@@ -70,8 +74,18 @@ class DocumentLibrary:
         return self.content(self.get(document_id))
 
     def content(self, record: DocumentRecord) -> bytes:
-        """The bytes of a record the caller already holds, without another lookup."""
-        return self._blobs.read(record.location)
+        """The bytes of a record the caller already holds, without another lookup.
+
+        Raise DocumentChangedError when a registered file was replaced by other content.
+        The ID is the hash of the content, and what is stored under the ID (answers, OCR
+        results, extractions) would then describe another drawing.
+        """
+        data = self._blobs.read(record.location)
+        if hashlib.sha256(data).hexdigest() != record.sha256:
+            raise DocumentChangedError(
+                f"{record.filename} was changed after it was registered. Register it again."
+            )
+        return data
 
     def list(self, limit: int = 100, offset: int = 0) -> list[DocumentRecord]:
         return self._metadata.list(limit=limit, offset=offset)
