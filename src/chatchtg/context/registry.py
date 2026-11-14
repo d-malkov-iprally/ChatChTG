@@ -1,10 +1,13 @@
 """The named composers. To add a strategy, write a composer and list it here."""
 
+from chatchtg.context.areas import AreaComposer
 from chatchtg.context.baseline import BaselineComposer
 from chatchtg.context.composer import Composer
 from chatchtg.context.room_conventions import RoomConventionsComposer
 
-COMPOSERS: dict[str, Composer] = {c.name: c for c in (BaselineComposer(), RoomConventionsComposer())}
+COMPOSERS: dict[str, Composer] = {
+    c.name: c for c in (BaselineComposer(), AreaComposer(), RoomConventionsComposer())
+}
 
 
 def get_composer(name: str) -> Composer:
