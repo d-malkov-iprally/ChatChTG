@@ -182,3 +182,31 @@ def test_the_store_is_in_the_state_folder(tmp_path):
     build_extraction_store(settings).put(extraction())
 
     assert (tmp_path / "var" / "metadata" / DOC / "areas@1.json").is_file()
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf")])
+def test_a_number_that_json_cannot_hold_is_refused(value):
+    with pytest.raises(ValidationError):
+        Item(id="room-1", kind="room", box=(0, 0, 1, 1), measures={"area_m2": value})
+    with pytest.raises(ValidationError):
+        Scale(pixels_per_metre=value)
+
+
+def test_a_file_that_cannot_be_read_does_not_hide_the_others(store, tmp_path):
+    store.put(extraction())
+    store.put(extraction(producer="detector"))
+    store.put(extraction(document_id=OTHER_DOC))
+    (tmp_path / "metadata" / DOC / "areas@1.json").write_text("{", encoding="utf-8")
+
+    assert [e.producer for e in store.list(DOC)] == ["detector"]
+    assert [e.document_id for e in store.iter("areas", 1)] == [OTHER_DOC]
+    with pytest.raises(ValidationError):
+        store.get(DOC, "areas", 1)
+
+
+@pytest.mark.parametrize(("document_id", "producer"), [("../secret", "areas"), (DOC, "../areas")])
+def test_the_store_reads_no_file_outside_its_folder(store, document_id, producer):
+    with pytest.raises(ValueError):
+        store.get(document_id, producer, 1)
+    with pytest.raises(ValueError):
+        store.list("../secret")

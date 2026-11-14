@@ -27,14 +27,19 @@ def load(dataset_dir: Path, measurements: Path) -> list[dict]:
     """The measured questions, each with ``split``, ``pred``, ``method`` and ``confident``."""
     tuned = tuned_plans(room_questions(dataset_dir))
     rows = []
+    failed = 0
     with measurements.open(encoding="utf-8") as lines:
         for line in lines:
             row = json.loads(line)
             if "error" in row["signals"]:
+                failed += 1
                 continue
             row["split"] = split_of(row["path"], tuned)
             row["pred"], row["method"], row["confident"] = decide(row["kind"], row["signals"])
             rows.append(row)
+    if failed:
+        # Said, because the accuracy below is then the accuracy on the questions that worked.
+        print(f"Left out {failed} questions whose measurement failed.", file=sys.stderr)
     return rows
 
 

@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
+
+from PIL import Image
 
 from chatchtg.rooms import ocr, router
 from chatchtg.rooms.router import Finding
+
+
+logger = logging.getLogger(__name__)
 
 
 class LabelRoomCounter:
@@ -21,5 +27,9 @@ class LabelRoomCounter:
     def solve(self, content: bytes, message: str) -> Finding | None:
         try:
             return router.solve(content, message, self._cache_dir)
-        except (ocr.OcrUnavailableError, OSError, ValueError):
+        except ocr.OcrUnavailableError:
+            return None
+        except (ocr.OcrFailedError, OSError, ValueError, Image.DecompressionBombError):
+            # Logged: every such question goes to the LLM, which is billed.
+            logger.warning("The room counter could not read the drawing", exc_info=True)
             return None

@@ -28,6 +28,8 @@ class ImageSize(BaseModel):
 
 
 class Scale(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
+
     ratio: float | None = Field(default=None, gt=0)
     """The printed scale: 100 for 1:100."""
     pixels_per_metre: float | None = Field(default=None, gt=0)
@@ -35,6 +37,9 @@ class Scale(BaseModel):
 
 class Item(BaseModel):
     """One thing found on the drawing. Coordinates are image pixels, origin top-left, y down."""
+
+    # JSON has no NaN or infinity. They would be written as null, and the file would not load.
+    model_config = ConfigDict(allow_inf_nan=False)
 
     id: str = Field(min_length=1)
     """Unique in its extraction, and the same for each run of the same producer version."""

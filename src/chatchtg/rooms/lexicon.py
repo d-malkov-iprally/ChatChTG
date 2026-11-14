@@ -17,18 +17,20 @@ FI = {
     "kitchen": r"(K|KK|KT|TK|AVOK|AVOKEITTIÖ|KEITTIÖ|KEITTOK(OMERO)?|APUK|APUKEITTIÖ|TUPAK|TUPAKEITTIÖ|KÖK|KOKVRÅ|KV)",
     "bathroom": r"(KH|KPH|PH|PSH|PESUH(UONE)?|SH|KYLPYH(UONE)?|BADRUM|BAD|DUSCH|TVÄTTRUM|TVÄTT)",
     "wc": r"(WC|W\.C|TOA)",
-    "balcony": r"(PARV|PARVEKE|LASITETTU|LASIPARVEKE|LAS\.?PARV|BALKONG|BALK|BALKONGER)",
+    "balcony": r"(PARV|PARVEKE|LASIPARVEKE|LAS\.?PARV|BALKONG|BALK|BALKONGER)",
 }
 ROOM_WORDS = re.compile(r"^(" + "|".join(FI.values()) + r"|OH|RT|ET|VH|ATK|TH|KHH|KUR|VAR|AK|AH|HH|PUKUH|TEKN|TUULIK|KUISTI|RUOK|\d+[.,]?\d*|M2|M²)$")
 WORD_SPLIT = re.compile(r"[\s/+,()\-:;]+")
 TYPOLOGY = re.compile(r"\d\s*[HhK]\s*\+|\+\s*[Ss]\s*$")
 
 
+# cyrillic/greek lookalikes produced by OCR on rotated text
+_LOOKALIKES = str.maketrans({"К": "K", "Р": "P", "Н": "H", "М": "M", "С": "C", "Т": "T", "Е": "E", "О": "O", "А": "A", "В": "B", "Х": "X", "З": "3"})
+
+
 def norm(s):
     s = unicodedata.normalize("NFC", s).upper()
-    # cyrillic/greek lookalikes produced by OCR on rotated text
-    tr = str.maketrans({"К": "K", "Р": "P", "Н": "H", "М": "M", "С": "C", "Т": "T", "Е": "E", "О": "O", "А": "A", "В": "B", "Х": "X"})
-    return s.translate(tr).strip(" .:;'\"")
+    return s.translate(_LOOKALIKES).strip(" .:;'\"")
 
 
 def words(text):
@@ -59,7 +61,7 @@ FUZZY = {
     "kitchen": ["KEITTIÖ", "KEITTOKOMERO", "AVOKEITTIÖ", "TUPAKEITTIÖ", "APUKEITTIÖ"],
     "bathroom": ["PESUHUONE", "KYLPYHUONE", "PESUH", "BADRUM"],
     "wc": [],
-    "balcony": ["PARVEKE", "LASITETTU", "BALKONG"],
+    "balcony": ["PARVEKE", "BALKONG"],
 }
 
 
@@ -73,7 +75,14 @@ def _lev(a, b):
     return prev[-1]
 
 
+# Words within the tolerance of a fuzzy word that name something else:
+# a dressing room and a washing machine are not a washroom (PESUHUONE).
+NOT_FUZZY = {"PUKUHUONE", "PESUKONE"}
+
+
 def fuzzy_word(w, kind):
+    if w in NOT_FUZZY:
+        return False
     for f in FUZZY[kind]:
         tol = 1 if len(f) <= 7 else 2
         if abs(len(w) - len(f)) <= tol and _lev(w, f) <= tol:
@@ -277,13 +286,22 @@ def swiss_label_hits(ocr, label, fuzzy=True):
             hits.append(t)
     out = []
     for h in hits:
-        if any(_contain(o["box"], h["box"]) > 0.5 and o.get("src") != h.get("src") for o in out):
+        # The same label read twice: by two passes, or in two overlapping tiles of one pass.
+        # A token that holds the label twice is in ``hits`` twice and stays.
+        if any(o is not h and _contain(o["box"], h["box"]) > 0.5 for o in out):
             continue
         out.append(h)
     return out
 
 
-APT = re.compile(r"\b(WHG|APP|APPT|APT|WOHNUNG|LOGEMENT|APPARTAMENTO)\.?\s*([A-Z]{1,2})\b")
+# The unit letter is one capital that no letter follows. "Whg. Al" is a misread "Whg. A)" and
+# "App. t" is noise: read as units "AL" and "T" they gave one unit too many, or twenty.
+APT = re.compile(r"\b(?i:WHG|APP|APPT|APT|WOHNUNG|LOGEMENT|APPARTAMENTO)\.?\s*([A-Z])(?![A-Za-z])")
+
+
+def _tag_text(s):
+    """As ``norm``, but the case is kept: a unit letter is a capital."""
+    return unicodedata.normalize("NFC", s).translate(_LOOKALIKES).strip(" .:;'\"")
 
 
 def swiss_apartments(ocr):
@@ -292,15 +310,15 @@ def swiss_apartments(ocr):
     for t in ocr["tokens"]:
         if t["box"][3] > cut:
             continue
-        for m in APT.finditer(norm(t["text"])):
-            tags.setdefault(m.group(2), t)
+        for m in APT.finditer(_tag_text(t["text"])):
+            tags.setdefault(m.group(1), t)
     return list(tags.values())
 
 
 def swiss_apartments_count(ocr, seq=True):
     tags = swiss_apartments(ocr)
     n = len(tags)
-    letters = [m.group(2) for t in tags for m in APT.finditer(norm(t["text"])) if len(m.group(2)) == 1 and m.group(2).isalpha()]
+    letters = [m.group(1) for t in tags for m in APT.finditer(_tag_text(t["text"]))]
     if seq and letters:
         n = max(n, ord(max(letters)) - ord("A") + 1)
     return n, tags
