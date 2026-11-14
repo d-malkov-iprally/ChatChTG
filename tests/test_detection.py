@@ -52,6 +52,7 @@ def test_cli_has_the_detect_demo_command(monkeypatch):
 
     assert main(["detect-demo"]) == 0
     assert calls[0][-1].endswith("detect_app.py")
+    assert "--server.address=127.0.0.1" in calls[0]
 
 
 class FakeDetector:
@@ -81,3 +82,28 @@ def test_app_detects_the_named_objects_on_a_dataset_image(tmp_path, monkeypatch)
     assert fake.calls == [((64, 48), ["door", "toilet"], 0.1)]
     assert app.metric[0].value == "2"
     assert any("OWLv2 base" in caption.value for caption in app.caption)
+
+
+def test_app_refuses_a_folder_outside_the_data_folder(tmp_path, monkeypatch):
+    data_root = tmp_path / "data"
+    data_root.mkdir()
+    Image.new("RGB", (8, 8), "white").save(tmp_path / "secret.png")
+    (data_root / "link.png").symlink_to(tmp_path / "secret.png")
+    monkeypatch.setenv("CHATCHTG_DATA_ROOT", str(data_root))
+
+    app = AppTest.from_file(APP, default_timeout=30).run()
+    app.segmented_control(key="source").set_value("Dataset folder").run()
+
+    # A file of the data folder that is a link to a file outside it.
+    assert not app.exception
+    assert [error.value for error in app.error] == [
+        "This file is a link to a file outside the data folder."
+    ]
+    assert app.button[0].disabled
+
+    for folder in ["..", str(tmp_path)]:
+        app.text_input(key="folder").set_value(folder).run()
+        assert not app.exception
+        assert [error.value for error in app.error] == ["The folder must be inside the data folder."]
+        assert not app.selectbox
+        assert app.button[0].disabled

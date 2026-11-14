@@ -24,7 +24,9 @@ def serve(_: argparse.Namespace) -> int:
 
 def detect_demo(_: argparse.Namespace) -> int:
     app = Path(__file__).parent / "ui" / "detect_app.py"
-    return subprocess.call([sys.executable, "-m", "streamlit", "run", str(app)])
+    # The demo shows files of this machine, so it is served to this machine only.
+    command = [sys.executable, "-m", "streamlit", "run", "--server.address=127.0.0.1", str(app)]
+    return subprocess.call(command)
 
 
 def ingest(args: argparse.Namespace) -> int:

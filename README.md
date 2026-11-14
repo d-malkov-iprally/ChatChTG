@@ -53,7 +53,8 @@ uv sync --extra detect                       # torch, transformers and scipy, ab
 uv run --extra detect chatchtg detect-demo   # start the demo at http://localhost:8501
 ```
 
-- The image is an upload, or a PNG/JPEG file of a folder. The folder defaults to `CHATCHTG_DATA_ROOT` (`data`).
+- The image is an upload, or a PNG/JPEG file of the data folder `CHATCHTG_DATA_ROOT` (`data`) or of one of its subfolders. The page does not read files outside the data folder.
+- The demo is served to this machine only (`127.0.0.1`).
 - The models are Grounding DINO tiny and base, MM Grounding DINO base, and OWLv2 base and large. They run on this machine: on a CUDA GPU, on Apple MPS, or on the CPU.
 - The first use of a model downloads its weights from the Hugging Face hub. That can take some minutes.
 - "Minimum score" removes detections below that score. Scores of different models are not comparable: OWLv2 gives much lower scores than Grounding DINO, so its default is 0.10 and not 0.25.

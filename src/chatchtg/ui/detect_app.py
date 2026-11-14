@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 from pathlib import Path
 
@@ -22,18 +23,27 @@ def detector(model_name: str):
     return models.load_detector(model_name)
 
 
+def inside(path: Path, root: Path) -> bool:
+    """True if ``path``, with its symbolic links followed, is ``root`` or is below it."""
+    return path.resolve().is_relative_to(root.resolve())
+
+
 @st.cache_data(ttl=60, show_spinner=False)
 def list_images(folder: str) -> list[str]:
-    """The first ``MAX_LISTED`` PNG/JPEG files below ``folder``, as sorted relative paths."""
+    """The first ``MAX_LISTED`` PNG/JPEG files below ``folder``, as relative paths.
+
+    The walk is in sorted order and stops when it has ``MAX_LISTED`` files.
+    """
     root = Path(folder)
-    if not root.is_dir():
-        return []
-    found = (
-        path.relative_to(root).as_posix()
-        for path in root.rglob("*")
-        if path.suffix.lower() in RASTER_SUFFIXES and path.is_file()
-    )
-    return sorted(found)[:MAX_LISTED]
+    names: list[str] = []
+    for directory, subdirectories, files in os.walk(root):
+        subdirectories.sort()
+        for file in sorted(files):
+            if Path(file).suffix.lower() in RASTER_SUFFIXES:
+                names.append((Path(directory) / file).relative_to(root).as_posix())
+                if len(names) == MAX_LISTED:
+                    return names
+    return names
 
 
 st.title("Open-vocabulary detection demo")
@@ -50,12 +60,28 @@ if source == "Upload":
         image = Image.open(upload)
         image_id = f"upload:{upload.file_id}"
 else:
-    folder = st.text_input("Folder", value=str(Settings.from_env().data_root), key="folder")
-    names = list_images(folder)
-    if names:
+    # The page reads files only below the data folder, so that a visitor of the page
+    # cannot list or open other files of this machine.
+    data_root = Settings.from_env().data_root
+    subfolder = st.text_input(
+        "Subfolder of the data folder",
+        value="",
+        placeholder="for example floorplans/data/cubicasa5k",
+        help=f"The data folder is {data_root}. Leave this empty to list all of it.",
+        key="folder",
+    )
+    folder = data_root / subfolder.strip()
+    if not inside(folder, data_root):
+        st.error("The folder must be inside the data folder.")
+    elif not folder.is_dir():
+        st.info("This folder does not exist.")
+    elif names := list_images(str(folder)):
         name = st.selectbox(f"Image (first {MAX_LISTED:,} of the folder)", names, key="image_name")
-        image = Image.open(Path(folder) / name)
-        image_id = f"file:{folder}/{name}"
+        if inside(folder / name, data_root):
+            image = Image.open(folder / name)
+            image_id = f"file:{folder}/{name}"
+        else:
+            st.error("This file is a link to a file outside the data folder.")
     else:
         st.info("No PNG or JPEG files in this folder.")
 
