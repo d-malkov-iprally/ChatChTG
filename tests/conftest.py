@@ -1,3 +1,5 @@
+import os
+
 import pytest
 
 from chatchtg.answering import AnswerService
@@ -13,9 +15,14 @@ JPEG = b"\xff\xd8\xff" + b"fake jpeg body"
 
 @pytest.fixture(autouse=True)
 def no_project_env_file(tmp_path, monkeypatch):
-    """Run each test in an empty folder, so a developer's .env file cannot change it."""
+    """Run each test in an empty folder and without the developer's CHATCHTG_* variables.
+
+    A .env file or a shell that selects the claude provider would otherwise make a test
+    send billed requests.
+    """
     monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("CHATCHTG_ANTHROPIC_API_KEY", raising=False)
+    for name in [name for name in os.environ if name.startswith("CHATCHTG_")]:
+        monkeypatch.delenv(name)
 
 
 @pytest.fixture
