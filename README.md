@@ -49,13 +49,15 @@ uv run pytest
 A separate Streamlit page to try open-vocabulary detectors on a drawing: select an image, name the objects to find ("window, door"), and see the boxes and the count of each label.
 
 ```sh
-uv sync --extra detect                       # torch, transformers and scipy, about 0.8 GB
+uv sync --extra detect                       # torch, torchvision, transformers and scipy, about 0.8 GB
 uv run --extra detect chatchtg detect-demo   # start the demo at http://localhost:8501
 ```
 
 - The image is an upload, or a PNG/JPEG file of the data folder `CHATCHTG_DATA_ROOT` (`data`) or of one of its subfolders. The page does not read files outside the data folder.
 - The demo is served to this machine only (`127.0.0.1`).
-- The models are Grounding DINO tiny and base, MM Grounding DINO base, and OWLv2 base and large. They run on this machine: on a CUDA GPU, on Apple MPS, or on the CPU.
+- The models are Grounding DINO tiny and base, MM Grounding DINO base, OWLv2 base and large, and SAM 3. They run on this machine: on a CUDA GPU, on Apple MPS, or on the CPU.
+- The SAM 3 weights are gated. To use SAM 3, request access at https://huggingface.co/facebook/sam3 with your Hugging Face account, wait for the approval, then run `uv run --extra detect hf auth login`. Without access, the demo shows these steps and the other models still work.
+- SAM 3.1 is not included. It changes the video tracker of SAM 3, and its weights do not load with `transformers`.
 - The first use of a model downloads its weights from the Hugging Face hub. That can take some minutes.
 - "Minimum score" removes detections below that score. Scores of different models are not comparable: OWLv2 gives much lower scores than Grounding DINO, so its default is 0.10 and not 0.25.
 - The demo does not use the document library or the LLM, and it stores nothing.

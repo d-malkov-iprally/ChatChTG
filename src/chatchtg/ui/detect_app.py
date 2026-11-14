@@ -117,7 +117,7 @@ if image is not None:
         try:
             with st.spinner(f"Loading {model_name}. The first load downloads the weights."):
                 loaded = detector(model_name)
-        except models.MissingDependencyError as error:
+        except models.DetectorUnavailableError as error:
             st.error(str(error))
             st.stop()
         with st.spinner("Detecting..."):

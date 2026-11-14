@@ -43,7 +43,7 @@ def test_draw_detections_draws_the_box_and_keeps_the_original():
 
 
 def test_every_model_has_a_known_family():
-    assert {spec.family for spec in MODELS.values()} == {"grounding-dino", "owlv2"}
+    assert {spec.family for spec in MODELS.values()} == {"grounding-dino", "owlv2", "sam3"}
 
 
 def test_cli_has_the_detect_demo_command(monkeypatch):
@@ -107,3 +107,24 @@ def test_app_refuses_a_folder_outside_the_data_folder(tmp_path, monkeypatch):
         assert [error.value for error in app.error] == ["The folder must be inside the data folder."]
         assert not app.selectbox
         assert app.button[0].disabled
+
+
+def test_app_tells_how_to_get_access_to_a_gated_model(tmp_path, monkeypatch):
+    Image.new("RGB", (64, 48), "white").save(tmp_path / "plan.png")
+    monkeypatch.setenv("CHATCHTG_DATA_ROOT", str(tmp_path))
+
+    def refuse(name):
+        raise models.ModelAccessError(f"{name} could not be loaded. Its weights are gated.")
+
+    monkeypatch.setattr(models, "load_detector", refuse)
+
+    app = AppTest.from_file(APP, default_timeout=30).run()
+    app.segmented_control(key="source").set_value("Dataset folder").run()
+    app.segmented_control(key="model").set_value("SAM 3").run()
+    app.button[0].click().run()
+
+    assert not app.exception
+    assert [error.value for error in app.error] == [
+        "SAM 3 could not be loaded. Its weights are gated."
+    ]
+    assert app.slider[0].value == 0.3
