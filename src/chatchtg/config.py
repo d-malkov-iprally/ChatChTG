@@ -26,6 +26,9 @@ class Settings:
     """This project's Anthropic key. None means the Anthropic SDK's own credential lookup."""
     judge_model: str | None = None
     """The model of the eval judge. None means the judge's default."""
+    room_counter: str = "off"
+    """``off``: the LLM answers everything. ``confident``: code answers a room-count question
+    when it is confident. ``always``: code answers every room-count question."""
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Settings:
@@ -45,4 +48,5 @@ class Settings:
             llm_model=env.get("CHATCHTG_LLM_MODEL") or None,
             anthropic_api_key=env.get("CHATCHTG_ANTHROPIC_API_KEY") or None,
             judge_model=env.get("CHATCHTG_JUDGE_MODEL") or None,
+            room_counter=env.get("CHATCHTG_ROOM_COUNTER", "off"),
         )
