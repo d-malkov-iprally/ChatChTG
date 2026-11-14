@@ -75,7 +75,7 @@ def table_text(analysis: PlanAnalysis) -> str:
 
 class AreaComposer:
     name = "areas"
-    version = 2
+    version = 3
 
     def __init__(self) -> None:
         self._baseline = BaselineComposer()
