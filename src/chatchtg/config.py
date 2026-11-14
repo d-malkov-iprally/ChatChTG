@@ -16,6 +16,8 @@ class Settings:
     """Where uploaded blobs, the metadata database and eval results are written."""
     composer: str
     llm_provider: str
+    llm_model: str | None = None
+    """The provider's model. None means the adapter's default."""
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Settings:
@@ -25,4 +27,5 @@ class Settings:
             state_dir=Path(env.get("CHATCHTG_STATE_DIR", "var")).resolve(),
             composer=env.get("CHATCHTG_COMPOSER", "baseline"),
             llm_provider=env.get("CHATCHTG_LLM_PROVIDER", "fake"),
+            llm_model=env.get("CHATCHTG_LLM_MODEL") or None,
         )

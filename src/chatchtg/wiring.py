@@ -24,5 +24,5 @@ def build_answer_service(
     return AnswerService(
         library=library,
         composer=get_composer(composer or settings.composer),
-        llm=build_llm(settings.llm_provider),
+        llm=build_llm(settings.llm_provider, settings.llm_model),
     )
