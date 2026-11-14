@@ -12,7 +12,7 @@ from chatchtg.documents.library import UnsupportedDocumentError
 from chatchtg.schemas import AnswerRequest
 from chatchtg.wiring import build_answer_service, build_library
 
-st.set_page_config(page_title="ChatChTG", page_icon="✦", layout="wide")
+st.set_page_config(page_title="ChatChTG", page_icon=":material/architecture:", layout="wide")
 
 
 @st.cache_resource
@@ -63,13 +63,6 @@ def inject_styles() -> None:
             box-shadow: 0 12px 36px rgba(0, 0, 0, 0.22);
         }
         .brand-mark { display: flex; align-items: center; gap: 0.68rem; min-width: 12.5rem; }
-        .brand-glyph { position: relative; width: 1.55rem; height: 1.55rem; transform: rotate(-31deg); }
-        .brand-glyph::before, .brand-glyph::after {
-            content: ""; position: absolute; width: 1.28rem; height: 0.46rem; left: 0.1rem;
-            border-radius: 0.1rem; background: linear-gradient(90deg, #b794f4, #d3bcff);
-        }
-        .brand-glyph::before { top: 0.2rem; }
-        .brand-glyph::after { top: 0.92rem; }
         .brand-name { font-size: 1.14rem; font-weight: 740; letter-spacing: -0.02em; }
         .brand-caret { color: #aeb7cd; font-size: 0.9rem; }
         .primary-nav { display: flex; gap: 0.36rem; height: 100%; align-items: center; }
@@ -157,7 +150,7 @@ def render_header() -> None:
     st.markdown(
         """
         <div class="top-chrome">
-          <div class="brand-mark"><span class="brand-glyph"></span><span class="brand-name">ChatChTG</span><span class="brand-caret">⌄</span></div>
+          <div class="brand-mark"><span class="brand-name">ChatChTG</span><span class="brand-caret">⌄</span></div>
           <div class="primary-nav"><span class="active">Analyze</span><span>Documents</span></div>
         </div>
         """,
