@@ -1,4 +1,4 @@
-"""Command line entry point: chatchtg serve | ingest | eval | benchmark."""
+"""Command line entry point: chatchtg serve | detect-demo | ingest | eval | benchmark."""
 
 from __future__ import annotations
 
@@ -20,6 +20,13 @@ from chatchtg.wiring import build_answer_service, build_judge, build_library
 def serve(_: argparse.Namespace) -> int:
     app = Path(__file__).parent / "ui" / "app.py"
     return subprocess.call([sys.executable, "-m", "streamlit", "run", str(app)])
+
+
+def detect_demo(_: argparse.Namespace) -> int:
+    app = Path(__file__).parent / "ui" / "detect_app.py"
+    # The demo shows files of this machine, so it is served to this machine only.
+    command = [sys.executable, "-m", "streamlit", "run", "--server.address=127.0.0.1", str(app)]
+    return subprocess.call(command)
 
 
 def ingest(args: argparse.Namespace) -> int:
@@ -135,6 +142,10 @@ def main(argv: list[str] | None = None) -> int:
     commands = parser.add_subparsers(dest="command", required=True)
 
     commands.add_parser("serve", help="start the Streamlit app").set_defaults(run=serve)
+
+    commands.add_parser(
+        "detect-demo", help="start the open-vocabulary detection demo (needs the detect extra)"
+    ).set_defaults(run=detect_demo)
 
     ingest_parser = commands.add_parser("ingest", help="register a dataset's raster drawings")
     ingest_parser.add_argument("dataset_dir", type=Path, help="for example data/preview")
