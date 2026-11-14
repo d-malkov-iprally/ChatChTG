@@ -9,6 +9,7 @@ from chatchtg.documents.blobs import LocalBlobStore
 from chatchtg.documents.library import DocumentLibrary
 from chatchtg.documents.metadata import SqliteMetadataStore
 from chatchtg.evals.judge import DEFAULT_JUDGE_MODEL, ClaudeJudge, FakeJudge, Judge
+from chatchtg.extractions.store import LocalExtractionStore
 from chatchtg.llm.client import build_llm
 from chatchtg.rooms.counter import LabelRoomCounter
 
@@ -20,6 +21,10 @@ def build_library(settings: Settings) -> DocumentLibrary:
         blobs=LocalBlobStore(settings.state_dir / "blobs", settings.data_root),
         metadata=SqliteMetadataStore(settings.state_dir / "chatchtg.db"),
     )
+
+
+def build_extraction_store(settings: Settings) -> LocalExtractionStore:
+    return LocalExtractionStore(settings.state_dir / "metadata")
 
 
 def build_answer_service(
