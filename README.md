@@ -3,6 +3,28 @@ Junction demo of drawing conversational platform
 
 The challenge this answers is recorded in [docs/challenge.md](docs/challenge.md).
 
+## Quick start
+
+You need [uv](https://docs.astral.sh/uv/). It installs the Python version given in `.python-version`.
+
+```sh
+uv sync                                # install the dependencies into .venv
+scripts/download_data.sh preview       # optional: sample drawings, into data/preview
+uv run chatchtg ingest data/preview    # optional: show those drawings in the app
+uv run chatchtg serve                  # start the app at http://localhost:8501
+```
+
+You can also upload your own PNG or JPEG drawing in the app. The answers come from the fake LLM, which needs no key. To get answers from Claude:
+
+```sh
+cp .env.example .env      # put your Anthropic key in CHATCHTG_ANTHROPIC_API_KEY
+uv run chatchtg serve
+```
+
+`.env.example` already sets `CHATCHTG_LLM_PROVIDER=claude`, so after the copy every command uses Claude. Each request is billed to the key's account. To use the fake LLM again, set `CHATCHTG_LLM_PROVIDER=fake`.
+
+The sections below give the details.
+
 ## Setup
 
 ```sh
