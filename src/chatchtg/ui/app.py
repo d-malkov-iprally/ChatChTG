@@ -45,8 +45,7 @@ def inject_styles() -> None:
             background-size: 24px 24px, 24px 24px, auto;
         }
 
-        [data-testid="stHeader"] { background: transparent; }
-        [data-testid="stToolbar"] { right: 1rem; }
+        [data-testid="stHeader"] { display: none; }
         [data-testid="stMainBlockContainer"] {
             max-width: none;
             padding: 0.65rem 1.1rem 1.1rem;
@@ -76,8 +75,6 @@ def inject_styles() -> None:
         .primary-nav { display: flex; gap: 0.36rem; height: 100%; align-items: center; }
         .primary-nav span { color: #c5cad9; padding: 0.55rem 1rem; border-radius: 0.35rem; font-size: 0.94rem; }
         .primary-nav .active { color: #fff; background: linear-gradient(135deg, #62558f, #413d65); box-shadow: inset 0 0 0 1px rgba(222, 210, 255, 0.15); }
-        .window-actions { margin-left: auto; color: #c7cede; letter-spacing: 1.35rem; font-size: 1.08rem; white-space: nowrap; }
-
         div[data-testid="stRadio"] { margin: 0.05rem 0 0.6rem; }
         div[data-testid="stRadio"] label {
             color: #edf1fa !important; font-size: 0.83rem !important; padding: 0.3rem 0.54rem;
@@ -85,6 +82,8 @@ def inject_styles() -> None:
         }
         div[data-testid="stRadio"] label:has(input:checked) { background: rgba(115, 85, 199, 0.42); border-color: rgba(191, 167, 255, 0.7); }
         div[data-testid="stRadio"] label > div:first-child { display: none; }
+        [data-testid="stSelectbox"] label,
+        [data-testid="stSelectbox"] label p { color: #e9edf7 !important; }
 
         .drawing-tab {
             display: inline-flex; align-items: center; gap: 0.75rem; min-height: 2rem; margin: 0.08rem 0 0.42rem 0.7rem;
@@ -113,6 +112,11 @@ def inject_styles() -> None:
         .st-key-drawing_canvas [data-testid="stImage"] img { background: #fff; object-fit: contain; max-height: 26rem; }
         .canvas-status { display: flex; gap: 1rem; margin: 0.7rem 0.2rem 0.05rem; color: #bdc7d8; font-size: 0.72rem; }
         .canvas-status span::before { content: ""; display: inline-block; width: 0.43rem; height: 0.43rem; margin-right: 0.35rem; border-radius: 50%; background: #69d2a4; }
+        .st-key-drawing_canvas [data-testid="stExpander"] {
+            color: #e9edf7; background: rgba(11, 17, 28, 0.62); border-color: rgba(187, 200, 229, 0.62);
+        }
+        .st-key-drawing_canvas [data-testid="stExpander"] summary,
+        .st-key-drawing_canvas [data-testid="stExpander"] summary p { color: #e9edf7 !important; }
 
         .st-key-assistant_panel {
             padding: 0.95rem; border: 1px solid rgba(207, 213, 228, 0.92); border-radius: 0.5rem;
@@ -155,7 +159,6 @@ def render_header() -> None:
         <div class="top-chrome">
           <div class="brand-mark"><span class="brand-glyph"></span><span class="brand-name">ChatChTG</span><span class="brand-caret">⌄</span></div>
           <div class="primary-nav"><span class="active">Analyze</span><span>Documents</span></div>
-          <div class="window-actions">— □ ×</div>
         </div>
         """,
         unsafe_allow_html=True,
