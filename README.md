@@ -1,6 +1,8 @@
 # ChatChTG
 Junction demo of drawing conversational platform
 
+The challenge this answers is recorded in [docs/challenge.md](docs/challenge.md).
+
 ## Setup
 
 ```sh
