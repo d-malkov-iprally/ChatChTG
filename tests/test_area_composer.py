@@ -3,8 +3,8 @@
 import pytest
 
 from chatchtg.areas.pipeline import PlanAnalysis, PlanRoom
-from chatchtg.context import areas
 from chatchtg.areas.questions import parse_question
+from chatchtg.context import areas
 from chatchtg.context.areas import AREA_SYSTEM_PROMPT, GAP_DOUBT, SCALE_DOUBT, AreaComposer, decide
 from chatchtg.context.baseline import SYSTEM_PROMPT
 from chatchtg.context.composer import ComposerInput
@@ -297,3 +297,29 @@ def test_the_summary_has_the_computed_value_without_the_statement(library, plan)
     summary = compose(library, ROOM).summary()["computed"]
 
     assert summary == {"value": pytest.approx(8.127), "unit": "m2", "basis": "measured", "doubts": []}
+
+
+def test_a_room_number_read_twice_is_described_by_the_reading_that_has_the_area(library, plan):
+    plan(analysis([room("1.01", "Küche", 8.0, method="printed"), room("1.01", "Kuche", None)]))
+
+    computed = compose(library, ROOM).computed
+
+    assert computed.basis == "printed"
+    assert "- 1.01 Küche: 8.00 m² (printed on the plan)" in computed.statement
+    assert "few percent" not in computed.statement
+
+
+@pytest.mark.parametrize(
+    ("question", "total"),
+    [
+        ("What is the total net floor area of all rooms labelled 'Zimmer 2' on this floor in m²?", 12.5),
+        ("What is the total net floor area of all numbered indoor rooms on this floor in m²?", 20.63),
+    ],
+)
+def test_the_statement_of_a_label_or_floor_total_ends_with_the_total(library, plan, question, total):
+    rooms = [room("1.01", "Küche", 8.127), room("1.02", "Zimmer 2", 12.5), room("1.03", "Balkon 3", 4.0, outdoor=True)]
+    plan(analysis(rooms, missing=["1.04"]))
+
+    text = compose(library, question).computed.statement
+
+    assert extract_number(text) == total and text.endswith(f"Answer: {total:.2f} m²") and "gap (1.04)" in text

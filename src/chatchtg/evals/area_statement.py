@@ -4,10 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from chatchtg.answering import AREA_PIPELINE_MODEL
 from chatchtg.evals.scoring import score_value
-
-STATED_MODEL = "area-pipeline"
-"""The model name of a code-stated area answer (``chatchtg.answering.AREA_PIPELINE_MODEL``)."""
 
 
 def _key(row: dict[str, Any]) -> tuple[str, str]:
@@ -29,7 +27,7 @@ def report(rows: list[dict[str, Any]], compare: list[dict[str, Any]] | None = No
     does not have), gained (correct here and not there) and lost (correct there and not here).
     """
     area = [row for row in rows if row["type"] == "area"]
-    stated = [row for row in area if row["model"] == STATED_MODEL]
+    stated = [row for row in area if row["model"] == AREA_PIPELINE_MODEL]
     value_right = [
         row
         for row in stated

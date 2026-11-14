@@ -82,6 +82,16 @@ def table_text(analysis: PlanAnalysis) -> str:
     return "\n".join(lines)
 
 
+def _methods(analysis: PlanAnalysis) -> dict[str, str | None]:
+    """How the area of each room number was obtained. For a number that was read twice,
+    the reading that has an area counts: it is the one that ``answer_query`` uses."""
+    methods: dict[str, str | None] = {}
+    for room in analysis.rooms:
+        if methods.get(room.number) is None:
+            methods[room.number] = room.method
+    return methods
+
+
 @dataclass(frozen=True)
 class AreaDecision:
     """What the pipeline found for one question, and whether its result is the answer."""
@@ -98,7 +108,7 @@ class AreaDecision:
 
 def decide(query: AreaQuery, analysis: PlanAnalysis) -> AreaDecision:
     answer = answer_query(query, analysis.rows())
-    methods = {room.number: room.method for room in analysis.rooms}
+    methods = _methods(analysis)
     measured = any(methods.get(room.number) != "printed" for room in answer.rooms)
     # A total may lack a room whose label was not read. On a plan that prints its areas
     # the LLM reads the labels reliably, so it gets the image then. On a plan without
@@ -134,7 +144,7 @@ def statement_text(query: AreaQuery, analysis: PlanAnalysis, decision: AreaDecis
     how = "This result was read from the drawing by the measurement tool, without a language model."
     if analysis.scale_read:  # a guessed scale is not a fact about the drawing
         how += f" Scale of the drawing: 1:{analysis.scale}."
-    methods = {room.number: room.method for room in analysis.rooms}
+    methods = _methods(analysis)
     rooms = []
     for room in answer.rooms:
         name = room.name or "no name"

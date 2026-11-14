@@ -83,7 +83,11 @@ class AnswerService:
 
     def _state(self, context: Context) -> Completion:
         """The answer text for a context: the statement that code wrote, when the context
-        carries one, and the LLM's completion otherwise."""
+        carries one, and the LLM's completion otherwise.
+
+        Only the areas composer writes a statement today, so the model name is the area
+        pipeline's. A second composer that states answers needs its own name.
+        """
         computed = context.computed
         if computed is not None and computed.statement:
             return Completion(text=computed.statement, model=AREA_PIPELINE_MODEL)
