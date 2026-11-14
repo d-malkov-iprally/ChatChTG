@@ -35,11 +35,19 @@ def extract_number(text: str) -> float | None:
 
 def score(question_type: str, expected: Any, response_text: str) -> bool | None:
     """True or False when the answer can be scored, None when it cannot."""
+    return score_value(question_type, expected, extract_number(response_text))
+
+
+def score_value(question_type: str, expected: Any, value: float | None) -> bool | None:
+    """Compare a value read from an answer with the expected answer.
+
+    True or False when the question can be scored, None when it cannot.
+    A ``value`` of None means that the answer gave no number.
+    """
     if isinstance(expected, bool) or not isinstance(expected, (int, float)):
         return None
     if question_type not in EXACT_TYPES | TOLERANCE_TYPES:
         return None
-    value = extract_number(response_text)
     if value is None:
         return False
     if question_type in EXACT_TYPES:

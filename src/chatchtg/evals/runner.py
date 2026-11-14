@@ -11,7 +11,8 @@ from typing import Any
 from chatchtg.answering import AnswerService
 from chatchtg.documents.library import RASTER_SUFFIXES, DocumentLibrary, UnsupportedDocumentError
 from chatchtg.evals.benchmark import sample_subset
-from chatchtg.evals.scoring import extract_number, score
+from chatchtg.evals.judge import Judge
+from chatchtg.evals.scoring import extract_number, score, score_value
 from chatchtg.llm.pricing import cost_usd
 from chatchtg.schemas import AnswerRequest
 
@@ -27,7 +28,7 @@ class EvalRun:
     summary: dict[str, dict[str, int]] = field(default_factory=dict)
     """Counts per question type: total, scored, correct."""
     cost_usd: float = 0.0
-    """Cost of the answers whose model has a known price."""
+    """Cost of the answers and of the judge, for the models that have a known price."""
     stopped_for_cost: bool = False
     """True when the run ended early because the next question could pass ``max_cost``."""
 
@@ -70,23 +71,32 @@ def run_eval(
     seed: int = 0,
     max_cost: float | None = None,
     resume: bool = False,
+    judge: Judge | None = None,
 ) -> EvalRun:
     """Write one JSON line per question to ``out_path``. Return the counts and the cost.
 
     ``questions_file`` names the question file inside ``dataset_dir``.
     ``sample`` picks that many questions, balanced over source and question type; the same
     ``seed`` gives the same questions.
-    ``max_cost`` is a limit in US dollars. The run stops before a question when the cost
-    so far plus the most expensive answer so far would pass it. One answer that costs more
-    than every answer before it can still pass the limit.
+    ``max_cost`` is a limit in US dollars, for the answers and the judge together. The run
+    stops before a question when the cost so far plus the most expensive question so far
+    would pass it. One question that costs more than every question before it can still
+    pass the limit.
     ``resume`` continues a run that was interrupted: the answers already in ``out_path``
     are kept and counted, and their questions are not asked again.
+
+    With a ``judge``, each answer that the rule can score is also read by the judge. The row
+    gets ``judge_*`` fields and the counts get ``judged``, ``judge_correct`` and ``disagree``.
+    ``correct`` stays the result of the rule.
     """
     questions: Iterator[dict[str, Any]] | list[dict[str, Any]]
     questions = read_questions(dataset_dir, questions_file)
     if sample is not None:
         questions = sample_subset(list(questions), sample, seed)
 
+    zero = {"total": 0, "scored": 0, "correct": 0}
+    if judge is not None:
+        zero |= {"judged": 0, "judge_correct": 0, "disagree": 0}
     run = EvalRun()
     summary = run.summary
     document_ids: dict[str, str | None] = {}
@@ -97,9 +107,10 @@ def run_eval(
     if resume and out_path.is_file():
         for row in _read_rows(out_path):
             answered.add((row["path"], row["question"]))
-            _count(summary, row["type"], row["correct"])
-            run.cost_usd += row.get("cost_usd") or 0.0
-            largest_cost = max(largest_cost, row.get("cost_usd") or 0.0)
+            _count(summary, zero, row["type"], row["correct"], row.get("judge_correct"))
+            row_cost = (row.get("cost_usd") or 0.0) + (row.get("judge_cost_usd") or 0.0)
+            run.cost_usd += row_cost
+            largest_cost = max(largest_cost, row_cost)
         done = len(answered)
     with out_path.open("a" if answered else "w", encoding="utf-8") as out:
         for question in questions:
@@ -139,27 +150,59 @@ def run_eval(
                 "usage": trace.completion.usage,
                 "cost_usd": cost,
             }
+            costs = [(trace.completion.model, cost)]
+            judge_correct = None
+            if judge is not None and correct is not None:
+                judgement = judge.read(question["question"], question.get("unit"), text)
+                reading = judgement.reading
+                if reading is not None:
+                    judge_correct = score_value(question["type"], question["answer"], reading.value)
+                row |= {
+                    "judge_model": judgement.model,
+                    "judge_value": reading.value if reading else None,
+                    "judge_unit": reading.unit if reading else None,
+                    "judge_quote": reading.quote if reading else None,
+                    "judge_correct": judge_correct,
+                    "judge_error": judgement.error,
+                    "judge_usage": judgement.usage,
+                    "judge_cost_usd": cost_usd(judgement.model, judgement.usage),
+                }
+                costs.append((judgement.model, row["judge_cost_usd"]))
             out.write(json.dumps(row, ensure_ascii=False) + "\n")
             out.flush()  # keep the answers already paid for if the run is interrupted
-            if cost is None and max_cost is not None:
-                raise UnknownPriceError(
-                    f"No price for model {trace.completion.model!r}, so the cost limit cannot "
-                    "be applied. Add the model to chatchtg/llm/pricing.py."
-                )
-            run.cost_usd += cost or 0.0
-            largest_cost = max(largest_cost, cost or 0.0)
+            if max_cost is not None:
+                for model, model_cost in costs:
+                    if model_cost is None:
+                        raise UnknownPriceError(
+                            f"No price for model {model!r}, so the cost limit cannot be "
+                            "applied. Add the model to chatchtg/llm/pricing.py."
+                        )
+            question_cost = sum(model_cost or 0.0 for _, model_cost in costs)
+            run.cost_usd += question_cost
+            largest_cost = max(largest_cost, question_cost)
 
-            _count(summary, question["type"], correct)
+            _count(summary, zero, question["type"], correct, judge_correct)
             done += 1
     return run
 
 
-def _count(summary: dict[str, dict[str, int]], question_type: str, correct: bool | None) -> None:
-    counts = summary.setdefault(question_type, {"total": 0, "scored": 0, "correct": 0})
+def _count(
+    summary: dict[str, dict[str, int]],
+    zero: dict[str, int],
+    question_type: str,
+    correct: bool | None,
+    judge_correct: bool | None,
+) -> None:
+    """Add one answer to the counts of its question type. ``zero`` is an empty set of counts."""
+    counts = summary.setdefault(question_type, dict(zero))
     counts["total"] += 1
     if correct is not None:
         counts["scored"] += 1
         counts["correct"] += int(correct)
+    if judge_correct is not None and "judged" in counts:
+        counts["judged"] += 1
+        counts["judge_correct"] += int(judge_correct)
+        counts["disagree"] += int(judge_correct != correct)
 
 
 def _read_rows(path: Path) -> list[dict[str, Any]]:

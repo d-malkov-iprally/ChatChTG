@@ -8,6 +8,7 @@ from collections.abc import Mapping
 # for prompts up to 100K tokens. The models that the API can fall back to are listed too.
 PRICES: dict[str, tuple[float, float]] = {
     "fake": (0.0, 0.0),
+    "fake-judge": (0.0, 0.0),
     "claude-fable-5-2": (8.0, 40.0),
     "claude-opus-5-5": (4.0, 20.0),
     "claude-opus-5": (5.0, 25.0),
