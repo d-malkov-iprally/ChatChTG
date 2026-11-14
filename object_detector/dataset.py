@@ -16,12 +16,16 @@ from __future__ import annotations
 import json
 import shutil
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from PIL import Image
 
 from object_detector.classes import CLASSES
 from object_detector.cubicasa_svg import Box, read_boxes
+
+# Some sheets are larger than the size at which Pillow warns of a decompression bomb.
+Image.MAX_IMAGE_PIXELS = None
 
 # CubiCasa5K split file -> folder name of RF-DETR.
 SPLITS = {"train.txt": "train", "val.txt": "valid", "test.txt": "test"}
@@ -60,37 +64,50 @@ def plan_boxes(plan_dir: Path) -> tuple[tuple[int, int], list[Box], int]:
     return (width, height), boxes, dropped
 
 
-def build_dataset(raw_dir: Path, out_dir: Path, limit: int | None = None) -> dict:
+def _convert_plan(raw_dir: Path, split_dir: Path, plan: str) -> dict:
+    """Read the labels of one plan and copy its image. Returns the plan's row, or the reason
+    why the plan is skipped."""
+    plan_dir = raw_dir / plan.strip("/")
+    try:
+        (width, height), boxes, dropped = plan_boxes(plan_dir)
+    except (OSError, SyntaxError, ValueError) as error:
+        return {"skipped": f"not readable: {error}"}
+    if dropped > MAX_OUTSIDE * (len(boxes) + dropped):
+        return {"skipped": f"{dropped} of {len(boxes) + dropped} boxes are outside the image"}
+    name = image_name(plan)
+    shutil.copyfile(plan_dir / "F1_original.png", split_dir / name)
+    return {"name": name, "width": width, "height": height, "boxes": boxes, "dropped": dropped}
+
+
+def build_dataset(raw_dir: Path, out_dir: Path, limit: int | None = None, workers: int = 32) -> dict:
     """Write the dataset to ``out_dir`` and return its statistics.
 
     ``raw_dir`` is the extracted ``cubicasa5k`` folder. ``limit`` takes only the first
-    plans of each split, for a quick check.
+    plans of each split, for a quick check. The plans are read by ``workers`` threads:
+    on a network volume, the time goes to reading and copying files.
     """
     stats: dict = {"classes": CLASSES, "splits": {}}
     for split_file, split in SPLITS.items():
         plans = (raw_dir / split_file).read_text().split()[:limit]
         split_dir = out_dir / split
         split_dir.mkdir(parents=True, exist_ok=True)
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            # map keeps the order of the plans, so the ids are the same in every build.
+            rows = list(pool.map(lambda plan: _convert_plan(raw_dir, split_dir, plan), plans))
         images, annotations = [], []
         boxes_by_class: Counter[str] = Counter()
         skipped: dict[str, str] = {}
         dropped_boxes = 0
-        for plan in plans:
-            plan_dir = raw_dir / plan.strip("/")
-            try:
-                (width, height), boxes, dropped = plan_boxes(plan_dir)
-            except (OSError, SyntaxError, ValueError) as error:
-                skipped[plan] = f"not readable: {error}"
+        for plan, row in zip(plans, rows):
+            if "skipped" in row:
+                skipped[plan] = row["skipped"]
                 continue
-            if dropped > MAX_OUTSIDE * (len(boxes) + dropped):
-                skipped[plan] = f"{dropped} of {len(boxes) + dropped} boxes are outside the image"
-                continue
-            dropped_boxes += dropped
-            name = image_name(plan)
-            shutil.copyfile(plan_dir / "F1_original.png", split_dir / name)
+            dropped_boxes += row["dropped"]
             image_id = len(images)
-            images.append({"id": image_id, "file_name": name, "width": width, "height": height})
-            for box in boxes:
+            images.append(
+                {"id": image_id, "file_name": row["name"], "width": row["width"], "height": row["height"]}
+            )
+            for box in row["boxes"]:
                 box_width, box_height = box.right - box.left, box.bottom - box.top
                 annotations.append(
                     {
@@ -116,6 +133,7 @@ def build_dataset(raw_dir: Path, out_dir: Path, limit: int | None = None) -> dic
             "dropped_boxes": dropped_boxes,
             "skipped_plans": skipped,
         }
+        print(f"{split}: {len(images)} images written", flush=True)
     (out_dir / "stats.json").write_text(json.dumps(stats, indent=2))
     return stats
 

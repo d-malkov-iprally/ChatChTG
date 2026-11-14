@@ -11,6 +11,8 @@ Everything is stored on the Modal volume ``chatchtg-object-detector``. See READM
 
 from __future__ import annotations
 
+import os
+
 import modal
 
 APP_NAME = "chatchtg-object-detector"
@@ -21,6 +23,14 @@ BENCHMARK_QUESTIONS = f"{VOLUME_DIR}/benchmark/questions.jsonl"
 # CubiCasa5K, https://zenodo.org/records/2613548, CC BY-NC-SA 4.0.
 ZIP_URL = "https://zenodo.org/api/records/2613548/files/cubicasa5k.zip/content"
 ZIP_MD5 = "0ce0b203d1e3c125b51087b219bd23b9"
+
+# The GPU of the training function. Set OBJECT_DETECTOR_GPU to train on another type,
+# for example L4 or A100-40GB. https://modal.com/docs/guide/gpu lists the types.
+# With OBJECT_DETECTOR_GPU=none no function asks for a GPU. `download` and `build_dataset`
+# need none, and Modal refuses an app with a GPU function if the account has no payment method.
+_GPU = os.environ.get("OBJECT_DETECTOR_GPU", "L40S")
+TRAIN_GPU = None if _GPU == "none" else _GPU
+SMALL_GPU = None if _GPU == "none" else "L4"
 
 # RF-DETR class name of each size. The sizes after "large" are not Apache 2.0: they need
 # the rfdetr[plus] package and Roboflow's PML licence.
@@ -51,7 +61,7 @@ def _run_dir(run_name: str) -> str:
     return f"{VOLUME_DIR}/runs/{run_name}"
 
 
-@app.function(image=image, gpu="L4", timeout=600)
+@app.function(image=image, gpu=SMALL_GPU, timeout=600)
 def smoke() -> None:
     """Show that the account, the image and a GPU work."""
     import rfdetr
@@ -95,7 +105,7 @@ def download() -> None:
     print("plans:", sum(1 for _ in Path(RAW_DIR).glob("*/*/model.svg")))
 
 
-@app.function(image=image, volumes={VOLUME_DIR: volume}, timeout=60 * 60, cpu=2)
+@app.function(image=image, volumes={VOLUME_DIR: volume}, timeout=3 * 60 * 60, cpu=8)
 def build_dataset(dataset: str = "cubicasa-v1", limit: int = 0) -> None:
     """Convert the labels to a COCO dataset on the volume and print its statistics."""
     import json
@@ -131,7 +141,7 @@ def build_dataset(dataset: str = "cubicasa-v1", limit: int = 0) -> None:
 @app.function(
     image=image,
     volumes={VOLUME_DIR: volume},
-    gpu="L40S",
+    gpu=TRAIN_GPU,
     cpu=8,
     memory=32768,
     timeout=24 * 60 * 60,
@@ -202,7 +212,7 @@ def train(
     volume.commit()
 
 
-@app.function(image=image, volumes={VOLUME_DIR: volume}, gpu="L4", timeout=2 * 60 * 60)
+@app.function(image=image, volumes={VOLUME_DIR: volume}, gpu=SMALL_GPU, timeout=2 * 60 * 60)
 def evaluate(run_name: str, dataset: str = "cubicasa-v1", limit: int = 0) -> None:
     """Score the best checkpoint of a run on the test split by its counts of objects.
 

@@ -93,6 +93,7 @@ def test_every_fixture_maps_to_a_class():
     assert set(FIXTURES.values()) <= set(CLASSES)
     assert "Urinal" not in FIXTURES
     assert "ShowerScreen" not in FIXTURES
+    assert "ShowerCab" not in FIXTURES
 
 
 def make_raw(root, plans: dict[str, str], scaled=(200, 100), original=(100, 50)):

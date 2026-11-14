@@ -60,7 +60,7 @@ uv run --group train modal volume get chatchtg-object-detector runs/large-1024/c
 
 - The split is the split of CubiCasa5K: 4,200 plans to train, 400 to validate, 400 to test. The 2019 model of CubiCasa5K has the same test plans.
 - The image of a plan is its `F1_original.png`, with the name `<category>-<id>.png`. That is the name and the size of the plan in the benchmark of this project.
-- `classes.py` maps the fixture names of CubiCasa5K to the classes. A urinal is not a toilet. A double sink is one sink. A shower screen is not a shower.
+- `classes.py` maps the fixture names of CubiCasa5K to the classes. A urinal is not a toilet. A double sink is one sink. A shower screen or a shower cabin is a part of a shower, not a second shower.
 - A door box covers the opening in the wall and the drawn swing. An opening without a door leaf is not a door.
 - A label file holds all floors of a building. All of them are read, because the image shows them side by side.
 - A plan is skipped if more than 20% of its boxes are outside the image.
