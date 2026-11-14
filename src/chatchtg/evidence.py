@@ -27,14 +27,19 @@ Key         Type                                 Meaning
 
 Rules:
 
+- The items ``{"text", "box"}`` of the room counter are valid items.
 - An item has one of ``box``, ``polygon``, ``point``, or none. With more than one, the
   renderer draws one: ``polygon``, else ``box``, else ``point``.
+- A box has ``x0 <= x1`` and ``y0 <= y1``. The renderer puts the corners of a box that
+  breaks this in order and draws it.
 - An item without geometry is a fact without a place (the total). It is listed, never drawn.
 - Readers ignore unknown keys. The renderer skips an item whose geometry is malformed and
   never raises for it; coordinates outside the image are clipped by the drawing.
 - ``AnswerResponse.method`` is a short code; its words are in ``METHOD_WORDS``. A producer
   that adds a method adds its words there.
 - One response carries the evidence of one producer.
+- Eval result rows have ``method`` and ``evidence`` only with ``chatchtg eval --evidence``.
+  Every other row key that describes evidence is written under the same option.
 
 The module needs Pillow only, so the app, the eval tools and the tests can all use it.
 """
@@ -94,7 +99,12 @@ def describe_method(method: str | None) -> str:
 
 
 def _is_number(value: Any) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:  # an integer too large for a float
+        return False
 
 
 def _numbers(value: Any, length: int) -> bool:
@@ -198,8 +208,13 @@ def _bounds(shape: str, data: list, radius: int) -> tuple[int, int, int, int]:
     return x - radius, y - radius, x + radius, y + radius
 
 
+TAG_LENGTH = 40  # characters of an item's text on its tag; the list has the whole text
+
+
 def _tag_text(item: dict[str, Any]) -> str:
-    return " ".join(part for part in (_text(item), _number_text(item.get("value"))) if part)
+    # One line: Pillow cannot measure a text with line breaks.
+    text = " ".join(_text(item).split())[:TAG_LENGTH]
+    return " ".join(part for part in (text, _number_text(item.get("value"))) if part)
 
 
 def _fitted_font(draw: ImageDraw.ImageDraw, tag: str, size: int, smallest: int, room: float):

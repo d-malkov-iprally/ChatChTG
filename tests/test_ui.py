@@ -9,7 +9,9 @@ from streamlit.testing.v1 import AppTest
 import chatchtg.ui.app as app_module
 from chatchtg.areas.pipeline import PlanAnalysis, PlanRoom
 from chatchtg.config import Settings
+from chatchtg import evidence as evidence_module
 from chatchtg.context import areas
+from conftest import EvidenceComposer
 from chatchtg.wiring import build_library
 
 APP = str(Path(app_module.__file__))
@@ -124,3 +126,35 @@ def test_app_drops_the_answer_when_another_document_is_selected(tmp_path, monkey
     assert not app.exception
     assert not any("How many doors?" in block.value for block in app.markdown)
     assert not app.info
+
+
+def test_app_shows_the_plain_drawing_when_the_evidence_cannot_be_drawn(tmp_path, monkeypatch):
+    monkeypatch.setenv("CHATCHTG_DATA_ROOT", str(tmp_path / "data"))
+    monkeypatch.setenv("CHATCHTG_STATE_DIR", str(tmp_path / "state"))
+    monkeypatch.setattr("chatchtg.context.registry.get_composer", lambda name: EvidenceComposer())
+    monkeypatch.setattr("chatchtg.wiring.get_composer", lambda name: EvidenceComposer())
+
+    def broken(content, evidence, focus=None):
+        raise ValueError("a fault in the renderer")
+
+    monkeypatch.setattr(evidence_module, "render_evidence", broken)
+    build_library(Settings.from_env()).add_upload(real_png(), "plan.png")
+
+    app = ask(AppTest.from_file(APP).run(), "Area of room 1.01?")
+
+    assert not app.exception and not app.error
+    assert any("could not be drawn" in block.value for block in app.warning)
+    assert [caption for image in app.image for caption in image.captions] == ["plan.png"]
+    assert app.table and app.expander                     # the rest of the page is still there
+
+
+def test_app_shows_the_question_with_the_answer(tmp_path, monkeypatch):
+    monkeypatch.setenv("CHATCHTG_DATA_ROOT", str(tmp_path / "data"))
+    monkeypatch.setenv("CHATCHTG_STATE_DIR", str(tmp_path / "state"))
+    build_library(Settings.from_env()).add_upload(real_png((4, 4)), "plan.png")
+
+    app = ask(AppTest.from_file(APP).run(), "How many doors?")
+    app.text_area[1].set_value("   ")                     # an empty question is not asked
+    app.button[1].click().run()
+
+    assert any(block.value == "Question: How many doors?" for block in app.caption)

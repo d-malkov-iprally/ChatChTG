@@ -73,12 +73,15 @@ if document is not None:
             # of each answer their own state.
             st.session_state["answer"] = {
                 "document_id": document.id,
+                "message": message,
                 "response": response,
                 "number": st.session_state.get("answer", {}).get("number", 0) + 1,
             }
         answer = st.session_state.get("answer")
         if answer is not None and answer["document_id"] == document.id:  # never on another drawing
             response = answer["response"]
+            # The form can hold a later question that was not answered.
+            st.caption(f"Question: {answer['message']}")
             st.markdown(response.text)
             st.caption(f"Composer: {response.composer} · Model: {response.model}")
             st.caption(f"Method: {describe_method(response.method)}")
@@ -102,10 +105,16 @@ if document is not None:
                 st.info("No evidence on the drawing for this answer.")
 
     with image_column:
+        annotated = None
+        if evidence:
+            try:
+                annotated = render_evidence(content, evidence, focus)
+            except Exception:  # a fault in the evidence must not hide the drawing
+                st.warning("The evidence could not be drawn. This is the plain drawing.")
         try:
-            if evidence:
+            if annotated is not None:
                 st.image(
-                    render_evidence(content, evidence, focus),
+                    annotated,
                     caption=f"Evidence on {document.filename}",
                     # A zoomed part is small: enlarge it to the column.
                     width="content" if focus is None else "stretch",

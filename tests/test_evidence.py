@@ -139,3 +139,19 @@ def test_the_box_of_a_small_label_on_a_large_drawing_does_not_cover_the_label():
     inside = [image.getpixel((x, y)) for x in range(1045, 1096) for y in range(317, 328)]
     assert set(inside) == {(255, 255, 255)}
     assert image.getpixel((1044, 322)) == RED
+
+
+def test_a_text_with_line_breaks_and_a_number_too_large_for_a_float_do_not_fail():
+    evidence = [
+        {"text": "two\nlines", "box": [100, 100, 200, 180]},
+        {"text": "two\nlines " * 30, "kind": "measured", "polygon": [[10, 10], [90, 10], [90, 60]]},
+        {"text": "huge", "value": 10**400, "point": [50, 50]},
+        {"text": "far", "point": [10**400, 5]},
+    ]
+
+    image = render_evidence(png(), evidence)
+
+    assert image.getpixel((100, 140)) == RED
+    assert geometry(evidence[3]) is None
+    assert [row["Value"] for row in legend_rows(evidence)] == ["", "", "", ""]
+    assert len(colour_key(evidence)) == 2
