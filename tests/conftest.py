@@ -11,6 +11,13 @@ PNG = b"\x89PNG\r\n\x1a\n" + b"fake png body"
 JPEG = b"\xff\xd8\xff" + b"fake jpeg body"
 
 
+@pytest.fixture(autouse=True)
+def no_project_env_file(tmp_path, monkeypatch):
+    """Run each test in an empty folder, so a developer's .env file cannot change it."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CHATCHTG_ANTHROPIC_API_KEY", raising=False)
+
+
 @pytest.fixture
 def data_root(tmp_path):
     root = tmp_path / "data"

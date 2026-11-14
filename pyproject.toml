@@ -5,7 +5,9 @@ description = "Junction demo of a drawing conversational platform"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "anthropic>=2.8.0",
     "pydantic>=2.7",
+    "python-dotenv>=1.2.4",
     "streamlit>=1.40",
 ]
 
