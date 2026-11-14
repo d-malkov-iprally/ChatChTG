@@ -11,6 +11,7 @@ dependencies = [
     "opencv-python-headless>=5.0.0.93",
     "pillow>=13.0.0",
     "pydantic>=2.7",
+    "pyobjc-framework-vision>=13.0 ; sys_platform == 'darwin'",
     "python-dotenv>=1.2.4",
     "rapidocr-onnxruntime>=1.4.4",
     "scipy>=1.18.1",

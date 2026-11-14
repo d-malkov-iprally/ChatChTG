@@ -11,6 +11,9 @@ from chatchtg.documents.metadata import SqliteMetadataStore
 from chatchtg.evals.judge import DEFAULT_JUDGE_MODEL, ClaudeJudge, FakeJudge, Judge
 from chatchtg.extractions.store import LocalExtractionStore
 from chatchtg.llm.client import build_llm
+from chatchtg.rooms.counter import LabelRoomCounter
+
+ROOM_COUNTER_MODES = ("off", "confident", "always")
 
 
 def build_library(settings: Settings) -> DocumentLibrary:
@@ -27,10 +30,20 @@ def build_extraction_store(settings: Settings) -> LocalExtractionStore:
 def build_answer_service(
     settings: Settings, library: DocumentLibrary, composer: str | None = None
 ) -> AnswerService:
+    if settings.room_counter not in ROOM_COUNTER_MODES:
+        raise ValueError(
+            f"Unknown room counter mode {settings.room_counter!r}. "
+            f"Available: {', '.join(ROOM_COUNTER_MODES)}"
+        )
+    room_counter = None
+    if settings.room_counter != "off":
+        room_counter = LabelRoomCounter(settings.state_dir / "ocr-cache")
     return AnswerService(
         library=library,
         composer=get_composer(composer or settings.composer),
         llm=build_llm(settings.llm_provider, settings.llm_model, settings.anthropic_api_key),
+        room_counter=room_counter,
+        trust_room_counter=settings.room_counter == "always",
     )
 
 
