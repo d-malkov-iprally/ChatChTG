@@ -22,6 +22,19 @@ uv run chatchtg eval data/preview --limit 50           # answer and score datase
 uv run pytest
 ```
 
+### Floor-plan benchmark
+
+Scores are compared on the floor-plan benchmark ([ADR 0003](docs/ADR/0003-floor-plans-only.md)). Build it once from the full dataset:
+
+```sh
+scripts/download_data.sh full
+uv run chatchtg benchmark data/full                    # writes data/floorplans (about 2.3 GB)
+uv run chatchtg eval data/floorplans --questions questions-subset.jsonl   # the 500-question subset
+uv run chatchtg eval data/floorplans                   # all 123,098 questions
+```
+
+`data/floorplans` holds the PNG floor plans of the `cubicasa5k` and `swiss_dwellings` sources that have questions, their licence files, `questions.jsonl` and `questions-subset.jsonl`. The folder has the layout of a downloaded dataset and contains its own images, so it can be copied to another machine. The subset is balanced over source and question type; the same `--seed` and `--subset-size` always give the same subset. Building again copies only the files that are missing.
+
 Answers come from a fake LLM unless you select a provider. To use Claude:
 
 ```sh
