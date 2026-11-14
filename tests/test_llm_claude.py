@@ -121,3 +121,29 @@ def test_settings_read_the_model():
     assert Settings.from_env({"CHATCHTG_LLM_MODEL": "claude-haiku-5-5"}).llm_model == (
         "claude-haiku-5-5"
     )
+
+
+def test_settings_read_the_env_file_of_the_current_folder(tmp_path, monkeypatch):
+    (tmp_path / ".env").write_text(
+        "CHATCHTG_ANTHROPIC_API_KEY=key-from-file\nCHATCHTG_LLM_MODEL=model-from-file\n"
+    )
+    monkeypatch.setenv("CHATCHTG_LLM_MODEL", "model-from-shell")
+
+    settings = Settings.from_env()
+
+    assert settings.anthropic_api_key == "key-from-file"
+    assert settings.llm_model == "model-from-shell"
+    assert "key-from-file" not in repr(settings)
+
+
+def test_project_key_goes_to_the_anthropic_client(monkeypatch):
+    import anthropic
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "global-key")
+    created = []
+    monkeypatch.setattr(anthropic, "Anthropic", lambda **kwargs: created.append(kwargs))
+
+    build_llm("claude", api_key="project-key")._get_client()
+    build_llm("claude")._get_client()
+
+    assert created == [{"api_key": "project-key"}, {}]

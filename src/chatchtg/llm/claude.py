@@ -19,8 +19,14 @@ REFUSAL_TEXT = "[no answer] The model declined to answer this request."
 
 
 class ClaudeLLM:
-    def __init__(self, model: str = DEFAULT_MODEL, client: Any | None = None) -> None:
+    def __init__(
+        self,
+        model: str = DEFAULT_MODEL,
+        api_key: str | None = None,
+        client: Any | None = None,
+    ) -> None:
         self.model = model
+        self._api_key = api_key
         self._client = client
 
     def complete(self, context: Context) -> Completion:
@@ -45,8 +51,11 @@ class ClaudeLLM:
         if self._client is None:
             import anthropic
 
-            # Reads ANTHROPIC_API_KEY, or the profile stored by `ant auth login`.
-            self._client = anthropic.Anthropic()
+            if self._api_key:
+                self._client = anthropic.Anthropic(api_key=self._api_key)
+            else:
+                # Reads ANTHROPIC_API_KEY, or the profile stored by `ant auth login`.
+                self._client = anthropic.Anthropic()
         return self._client
 
 

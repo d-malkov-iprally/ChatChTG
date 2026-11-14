@@ -19,10 +19,13 @@ class LLMClient(Protocol):
     def complete(self, context: Context) -> Completion: ...
 
 
-def build_llm(provider: str, model: str | None = None) -> LLMClient:
+def build_llm(
+    provider: str, model: str | None = None, api_key: str | None = None
+) -> LLMClient:
     """Return the adapter for ``provider``. To add a provider, add a branch here.
 
     ``model`` picks the provider's model. None means the adapter's default.
+    ``api_key`` is the provider's key. None means the provider SDK's own credential lookup.
     """
     if provider == "fake":
         from chatchtg.llm.fake import FakeLLM
@@ -31,5 +34,5 @@ def build_llm(provider: str, model: str | None = None) -> LLMClient:
     if provider == "claude":
         from chatchtg.llm.claude import DEFAULT_MODEL, ClaudeLLM
 
-        return ClaudeLLM(model or DEFAULT_MODEL)
+        return ClaudeLLM(model or DEFAULT_MODEL, api_key=api_key)
     raise ValueError(f"Unknown LLM provider {provider!r}. Available: claude, fake")
