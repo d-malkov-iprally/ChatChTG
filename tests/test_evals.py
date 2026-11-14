@@ -10,7 +10,7 @@ from chatchtg.evals.scoring import extract_number, score
 from chatchtg.llm.client import Completion
 from chatchtg.llm.fake import FakeLLM
 from chatchtg.llm.pricing import cost_usd
-from conftest import PNG
+from conftest import PNG, EvidenceComposer
 
 
 @pytest.mark.parametrize(
@@ -107,6 +107,50 @@ def test_cli_ingest_is_idempotent_and_eval_runs(dataset, tmp_path, monkeypatch, 
     assert main(["eval", str(dataset), "--composer", "baseline", "--out", str(out_path)]) == 0
     assert "baseline@1" in capsys.readouterr().out
     assert len(out_path.read_text().splitlines()) == 3
+
+
+def test_cli_eval_writes_the_evidence_only_with_the_option(dataset, tmp_path, monkeypatch):
+    monkeypatch.setenv("CHATCHTG_DATA_ROOT", str(dataset.parent))
+    monkeypatch.setenv("CHATCHTG_STATE_DIR", str(tmp_path / "state"))
+    monkeypatch.setenv("CHATCHTG_LLM_PROVIDER", "fake")
+    with_option, without = tmp_path / "with.jsonl", tmp_path / "without.jsonl"
+
+    assert main(["eval", str(dataset), "--out", str(with_option), "--evidence"]) == 0
+    assert main(["eval", str(dataset), "--out", str(without)]) == 0
+
+    row = json.loads(with_option.read_text().splitlines()[0])
+    assert row["evidence"] == [] and row["method"] is None    # the baseline composer gives none
+    assert "evidence" not in json.loads(without.read_text().splitlines()[0])
+
+
+def test_run_eval_records_the_method_and_the_evidence_on_request(dataset, library, tmp_path):
+    service = AnswerService(library, EvidenceComposer(), FakeLLM(reply="The answer is 4"))
+    out_path = tmp_path / "result.jsonl"
+
+    run_eval(dataset, library, service, out_path, evidence=True)
+
+    rows = [json.loads(line) for line in out_path.read_text().splitlines()]
+    assert rows[0]["method"] == "printed"
+    assert rows[0]["evidence"] == [{"text": "1.01", "kind": "printed", "value": 8.0, "unit": "m²", "point": [4, 5]}]
+
+
+def test_run_eval_records_an_empty_evidence_for_a_plain_llm_answer_on_request(dataset, library, service, tmp_path):
+    out_path = tmp_path / "result.jsonl"
+
+    run_eval(dataset, library, service, out_path, evidence=True)
+
+    row = json.loads(out_path.read_text().splitlines()[0])
+    assert row["method"] is None and row["evidence"] == []
+
+
+def test_run_eval_leaves_the_evidence_out_by_default(dataset, library, tmp_path):
+    service = AnswerService(library, EvidenceComposer(), FakeLLM(reply="The answer is 4"))
+    out_path = tmp_path / "result.jsonl"
+
+    run_eval(dataset, library, service, out_path)
+
+    row = json.loads(out_path.read_text().splitlines()[0])
+    assert "method" not in row and "evidence" not in row
 
 
 def test_cli_eval_without_questions_file_writes_nothing(tmp_path, monkeypatch, capsys):

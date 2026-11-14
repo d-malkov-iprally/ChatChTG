@@ -91,6 +91,7 @@ def evaluate(args: argparse.Namespace) -> int:
             max_cost=args.max_cost,
             resume=args.resume,
             judge=judge,
+            evidence=args.evidence,
         )
     except UnknownPriceError as error:
         print(f"{error} Answers so far: {out_path}", file=sys.stderr)
@@ -183,6 +184,12 @@ def main(argv: list[str] | None = None) -> int:
         "--judge",
         action="store_true",
         help="also have a small model read each answer (one more LLM call per scored answer)",
+    )
+    eval_parser.add_argument(
+        "--evidence",
+        action="store_true",
+        help="also write the method and the evidence of each answer to its result row "
+        "(with --resume, the rows of the earlier run stay as they are)",
     )
     eval_parser.set_defaults(run=evaluate)
 
