@@ -12,7 +12,7 @@ from chatchtg.documents.library import UnsupportedDocumentError
 from chatchtg.schemas import AnswerRequest
 from chatchtg.wiring import build_answer_service, build_library
 
-st.set_page_config(page_title="ChatChTG", page_icon=":material/architecture:", layout="wide")
+st.set_page_config(page_title="ChatChTG", page_icon="🧭", layout="wide")
 
 
 @st.cache_resource
@@ -68,13 +68,13 @@ def inject_styles() -> None:
         .primary-nav { display: flex; gap: 0.36rem; height: 100%; align-items: center; }
         .primary-nav span { color: #c5cad9; padding: 0.55rem 1rem; border-radius: 0.35rem; font-size: 0.94rem; }
         .primary-nav .active { color: #fff; background: linear-gradient(135deg, #62558f, #413d65); box-shadow: inset 0 0 0 1px rgba(222, 210, 255, 0.15); }
-        div[data-testid="stRadio"] { margin: 0.05rem 0 0.6rem; }
-        div[data-testid="stRadio"] label {
-            color: #edf1fa !important; font-size: 0.83rem !important; padding: 0.3rem 0.54rem;
-            background: rgba(15, 21, 33, 0.78); border: 1px solid rgba(181, 192, 218, 0.18); border-radius: 0.34rem;
+        div[data-testid="stSegmentedControl"] { margin: 0.05rem 0 0.6rem; }
+        div[data-testid="stSegmentedControl"] button {
+            color: #edf1fa; background: rgba(15, 21, 33, 0.78); border-color: rgba(181, 192, 218, 0.18);
         }
-        div[data-testid="stRadio"] label:has(input:checked) { background: rgba(115, 85, 199, 0.42); border-color: rgba(191, 167, 255, 0.7); }
-        div[data-testid="stRadio"] label > div:first-child { display: none; }
+        div[data-testid="stSegmentedControl"] button[aria-pressed="true"] {
+            background: rgba(115, 85, 199, 0.62); border-color: rgba(191, 167, 255, 0.7);
+        }
         [data-testid="stSelectbox"] label,
         [data-testid="stSelectbox"] label p { color: #e9edf7 !important; }
 
@@ -159,10 +159,10 @@ def render_header() -> None:
 
 
 def render_document_picker(library):
-    source = st.radio(
+    source = st.segmented_control(
         "Document",
         ["Upload an image", "Registered document"],
-        horizontal=True,
+        default="Upload an image",
         label_visibility="collapsed",
     )
     if source == "Upload an image":
