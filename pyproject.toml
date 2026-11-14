@@ -6,8 +6,12 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "anthropic>=2.8.0",
+    "numpy>=2.5.4",
+    "opencv-python-headless>=5.0.0.93",
     "pydantic>=2.7",
     "python-dotenv>=1.2.4",
+    "rapidocr-onnxruntime>=1.4.4",
+    "scipy>=1.18.1",
     "streamlit>=1.40",
 ]
 
@@ -15,7 +19,11 @@ dependencies = [
 chatchtg = "chatchtg.cli:main"
 
 [dependency-groups]
-dev = ["pytest>=8"]
+dev = [
+    "ezdxf>=1.4.5",
+    "pytest>=8",
+    "shapely>=2.2.0",
+]
 
 [build-system]
 requires = ["hatchling"]
