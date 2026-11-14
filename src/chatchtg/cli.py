@@ -73,6 +73,7 @@ def evaluate(args: argparse.Namespace) -> int:
             sample=args.sample,
             seed=args.seed,
             max_cost=args.max_cost,
+            resume=args.resume,
         )
     except UnknownPriceError as error:
         print(f"{error} Answers so far: {out_path}", file=sys.stderr)
@@ -138,6 +139,9 @@ def main(argv: list[str] | None = None) -> int:
     eval_parser.add_argument("--seed", type=int, default=0, help="seed of the --sample pick")
     eval_parser.add_argument(
         "--max-cost", type=float, help="stop before the cost passes this many US dollars"
+    )
+    eval_parser.add_argument(
+        "--resume", action="store_true", help="continue the run in --out; keep its answers"
     )
     eval_parser.set_defaults(run=evaluate)
 

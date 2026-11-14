@@ -207,3 +207,18 @@ def test_cli_eval_prints_the_cost(dataset, tmp_path, monkeypatch, capsys):
     assert main(["eval", str(dataset), "--sample", "2", "--max-cost", "1"]) == 0
 
     assert "Questions answered: 2. Cost: $0.00." in capsys.readouterr().out
+
+
+def test_run_eval_resume_keeps_answers_and_asks_only_the_rest(dataset, library, tmp_path):
+    service = AnswerService(library, BaselineComposer(), MeteredLLM())
+    out_path = tmp_path / "result.jsonl"
+    run_eval(dataset, library, service, out_path, limit=1)
+    first_line = out_path.read_text()
+
+    run = run_eval(dataset, library, service, out_path, resume=True)
+
+    lines = out_path.read_text().splitlines(keepends=True)
+    assert lines[0] == first_line
+    assert [json.loads(line)["question"] for line in lines] == ["Windows?", "Area?", "Room name?"]
+    assert sum(counts["total"] for counts in run.summary.values()) == 3
+    assert run.cost_usd == pytest.approx(18.0)

@@ -69,6 +69,7 @@ def run_eval(
     sample: int | None = None,
     seed: int = 0,
     max_cost: float | None = None,
+    resume: bool = False,
 ) -> EvalRun:
     """Write one JSON line per question to ``out_path``. Return the counts and the cost.
 
@@ -78,6 +79,8 @@ def run_eval(
     ``max_cost`` is a limit in US dollars. The run stops before a question when the cost
     so far plus the most expensive answer so far would pass it. One answer that costs more
     than every answer before it can still pass the limit.
+    ``resume`` continues a run that was interrupted: the answers already in ``out_path``
+    are kept and counted, and their questions are not asked again.
     """
     questions: Iterator[dict[str, Any]] | list[dict[str, Any]]
     questions = read_questions(dataset_dir, questions_file)
@@ -90,8 +93,18 @@ def run_eval(
     out_path.parent.mkdir(parents=True, exist_ok=True)
     done = 0
     largest_cost = 0.0
-    with out_path.open("w", encoding="utf-8") as out:
+    answered: set[tuple[str, str]] = set()
+    if resume and out_path.is_file():
+        for row in _read_rows(out_path):
+            answered.add((row["path"], row["question"]))
+            _count(summary, row["type"], row["correct"])
+            run.cost_usd += row.get("cost_usd") or 0.0
+            largest_cost = max(largest_cost, row.get("cost_usd") or 0.0)
+        done = len(answered)
+    with out_path.open("a" if answered else "w", encoding="utf-8") as out:
         for question in questions:
+            if (question["path"], question["question"]) in answered:
+                continue
             if limit is not None and done >= limit:
                 break
             if max_cost is not None and run.cost_usd + largest_cost > max_cost:
@@ -136,10 +149,19 @@ def run_eval(
             run.cost_usd += cost or 0.0
             largest_cost = max(largest_cost, cost or 0.0)
 
-            counts = summary.setdefault(question["type"], {"total": 0, "scored": 0, "correct": 0})
-            counts["total"] += 1
-            if correct is not None:
-                counts["scored"] += 1
-                counts["correct"] += int(correct)
+            _count(summary, question["type"], correct)
             done += 1
     return run
+
+
+def _count(summary: dict[str, dict[str, int]], question_type: str, correct: bool | None) -> None:
+    counts = summary.setdefault(question_type, {"total": 0, "scored": 0, "correct": 0})
+    counts["total"] += 1
+    if correct is not None:
+        counts["scored"] += 1
+        counts["correct"] += int(correct)
+
+
+def _read_rows(path: Path) -> list[dict[str, Any]]:
+    with path.open(encoding="utf-8") as lines:
+        return [json.loads(line) for line in lines if line.strip()]
