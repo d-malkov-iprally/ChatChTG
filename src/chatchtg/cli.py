@@ -14,7 +14,7 @@ from chatchtg.context.registry import COMPOSERS, get_composer
 from chatchtg.documents.library import RASTER_SUFFIXES, UnsupportedDocumentError
 from chatchtg.evals.benchmark import build_benchmark
 from chatchtg.evals.runner import run_eval
-from chatchtg.wiring import build_answer_service, build_library
+from chatchtg.wiring import build_answer_service, build_judge, build_library
 
 
 def serve(_: argparse.Namespace) -> int:
@@ -62,18 +62,38 @@ def evaluate(args: argparse.Namespace) -> int:
     service = build_answer_service(settings, library, composer=composer.name)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     out_path = args.out or settings.state_dir / "eval-runs" / f"{stamp}-{composer_id(composer)}.jsonl"
+    judge = build_judge(settings) if args.judge else None
     summary = run_eval(
-        dataset_dir, library, service, out_path, limit=args.limit, questions_file=args.questions
+        dataset_dir,
+        library,
+        service,
+        out_path,
+        limit=args.limit,
+        questions_file=args.questions,
+        judge=judge,
     )
 
     print(f"Composer: {composer_id(composer)}. LLM provider: {settings.llm_provider}.")
-    print(f"{'type':<10}{'total':>8}{'scored':>8}{'correct':>9}{'accuracy':>10}")
+    header = f"{'type':<10}{'total':>8}{'scored':>8}{'correct':>9}{'accuracy':>10}"
+    if judge is not None:
+        # "accuracy" is the rule's score. The judge columns come from the judge's reading.
+        print(f"Judge: {judge.model}.")
+        header += f"{'judged':>8}{'judge ok':>10}{'judge acc':>11}{'disagree':>10}"
+    print(header)
     for question_type, counts in sorted(summary.items()):
         accuracy = f"{counts['correct'] / counts['scored']:.1%}" if counts["scored"] else "-"
-        print(
+        line = (
             f"{question_type:<10}{counts['total']:>8}{counts['scored']:>8}"
             f"{counts['correct']:>9}{accuracy:>10}"
         )
+        if judge is not None:
+            judged = counts["judged"]
+            judge_accuracy = f"{counts['judge_correct'] / judged:.1%}" if judged else "-"
+            line += (
+                f"{judged:>8}{counts['judge_correct']:>10}{judge_accuracy:>11}"
+                f"{counts['disagree']:>10}"
+            )
+        print(line)
     print(f"Results: {out_path}")
     return 0
 
@@ -114,6 +134,11 @@ def main(argv: list[str] | None = None) -> int:
     eval_parser.add_argument("--out", type=Path, help="results file (default: var/eval-runs/)")
     eval_parser.add_argument(
         "--questions", default="questions.jsonl", help="question file inside the dataset folder"
+    )
+    eval_parser.add_argument(
+        "--judge",
+        action="store_true",
+        help="also have a small model read each answer (one more LLM call per scored answer)",
     )
     eval_parser.set_defaults(run=evaluate)
 

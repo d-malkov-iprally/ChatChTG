@@ -9,7 +9,8 @@ from typing import Any
 
 from chatchtg.answering import AnswerService
 from chatchtg.documents.library import RASTER_SUFFIXES, DocumentLibrary, UnsupportedDocumentError
-from chatchtg.evals.scoring import extract_number, score
+from chatchtg.evals.judge import Judge
+from chatchtg.evals.scoring import extract_number, score, score_value
 from chatchtg.schemas import AnswerRequest
 
 
@@ -47,11 +48,19 @@ def run_eval(
     out_path: Path,
     limit: int | None = None,
     questions_file: str = "questions.jsonl",
+    judge: Judge | None = None,
 ) -> dict[str, dict[str, int]]:
     """Write one JSON line per question to ``out_path``. Return counts per question type.
 
     ``questions_file`` names the question file inside ``dataset_dir``.
+
+    With a ``judge``, each answer that the rule can score is also read by the judge. The row
+    gets ``judge_*`` fields and the counts get ``judged``, ``judge_correct`` and ``disagree``.
+    ``correct`` stays the result of the rule.
     """
+    zero = {"total": 0, "scored": 0, "correct": 0}
+    if judge is not None:
+        zero |= {"judged": 0, "judge_correct": 0, "disagree": 0}
     summary: dict[str, dict[str, int]] = {}
     document_ids: dict[str, str | None] = {}
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -86,12 +95,31 @@ def run_eval(
                 "extracted_value": extract_number(text),
                 "correct": correct,
             }
+            judge_correct = None
+            if judge is not None and correct is not None:
+                judgement = judge.read(question["question"], question.get("unit"), text)
+                reading = judgement.reading
+                if reading is not None:
+                    judge_correct = score_value(question["type"], question["answer"], reading.value)
+                row |= {
+                    "judge_model": judgement.model,
+                    "judge_value": reading.value if reading else None,
+                    "judge_unit": reading.unit if reading else None,
+                    "judge_quote": reading.quote if reading else None,
+                    "judge_correct": judge_correct,
+                    "judge_error": judgement.error,
+                    "judge_usage": judgement.usage,
+                }
             out.write(json.dumps(row, ensure_ascii=False) + "\n")
 
-            counts = summary.setdefault(question["type"], {"total": 0, "scored": 0, "correct": 0})
+            counts = summary.setdefault(question["type"], dict(zero))
             counts["total"] += 1
             if correct is not None:
                 counts["scored"] += 1
                 counts["correct"] += int(correct)
+            if judge_correct is not None:
+                counts["judged"] += 1
+                counts["judge_correct"] += int(judge_correct)
+                counts["disagree"] += int(judge_correct != correct)
             done += 1
     return summary

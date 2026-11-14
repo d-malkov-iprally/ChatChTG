@@ -44,7 +44,7 @@ class ClaudeLLM:
         else:
             text = "".join(block.text for block in response.content if block.type == "text")
         # response.model is the model that served the request, which a fallback can change.
-        return Completion(text=text, model=response.model, usage=_usage(response.usage))
+        return Completion(text=text, model=response.model, usage=token_usage(response.usage))
 
     def _get_client(self) -> Any:
         # Created on first use, so building the adapter needs no credentials.
@@ -80,6 +80,7 @@ _USAGE_FIELDS = (
 )
 
 
-def _usage(usage: Any) -> dict[str, int]:
+def token_usage(usage: Any) -> dict[str, int]:
+    """The integer token counts of an API usage object."""
     counts = {name: getattr(usage, name, None) for name in _USAGE_FIELDS}
     return {name: value for name, value in counts.items() if isinstance(value, int)}
