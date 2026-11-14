@@ -145,7 +145,7 @@ Every `CHATCHTG_*` variable can be set in `.env`. The file is read from the fold
 
 If `CHATCHTG_ANTHROPIC_API_KEY` is not set, the Anthropic SDK looks for credentials itself: `ANTHROPIC_API_KEY`, or a login made with `ant auth login`.
 
-State (uploaded files, `chatchtg.db`, eval results) is written to `var/`.
+State (uploaded files, `chatchtg.db`, extractions, eval results) is written to `var/`.
 
 Set these in the shell or in `.env`:
 
@@ -175,6 +175,7 @@ blobs.py   metadata.py
 
 - **Document storage** (`documents/blobs.py`): uploads are copied to `var/blobs/`; dataset files are referenced in place.
 - **Metadata storage** (`documents/metadata.py`): one SQLite record per document, with free-form JSON attributes.
+- **Extraction storage** (`extractions/`): the facts that a producer derived from a drawing (rooms, objects, their geometry and measures), one JSON file per drawing and producer version in `var/metadata/`. The format is in [docs/metadata-format.md](docs/metadata-format.md). Nothing reads or writes it yet.
 - **Context composer** (`context/`): a pure function `(document record, bytes, message) -> Context`. It never calls an LLM. To add a strategy, write a composer and list it in `context/registry.py`.
 - **LLM** (`llm/`): `LLMClient.complete(Context) -> Completion`. To add a provider, write one adapter and add a branch to `build_llm`.
   - `fake` (`llm/fake.py`): a deterministic stand-in for tests and offline runs.
