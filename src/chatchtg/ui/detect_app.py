@@ -10,7 +10,14 @@ import streamlit as st
 from PIL import Image
 
 from chatchtg.config import Settings
-from chatchtg.detection import count_by_label, draw_detections, models, parse_labels
+from chatchtg.detection import (
+    UnreadableImageError,
+    count_by_label,
+    draw_detections,
+    models,
+    open_image,
+    parse_labels,
+)
 from chatchtg.documents.library import RASTER_SUFFIXES
 
 MAX_LISTED = 2000
@@ -27,7 +34,10 @@ def detector(model_name: str):
 
 def inside(path: Path, root: Path) -> bool:
     """True if ``path``, with its symbolic links followed, is ``root`` or is below it."""
-    return path.resolve().is_relative_to(root.resolve())
+    try:
+        return path.resolve().is_relative_to(root.resolve())
+    except (OSError, ValueError):  # for example a NUL character in the name
+        return False
 
 
 @st.cache_data(ttl=60, show_spinner=False)
@@ -59,8 +69,11 @@ source = st.segmented_control(
 if source == "Upload":
     upload = st.file_uploader("Image (PNG or JPEG)", type=["png", "jpg", "jpeg"], key="upload")
     if upload is not None:
-        image = Image.open(upload)
-        image_id = f"upload:{upload.file_id}"
+        try:
+            image = open_image(upload)
+            image_id = f"upload:{upload.file_id}"
+        except UnreadableImageError as error:
+            st.error(str(error))
 else:
     # The page reads files only below the data folder, so that a visitor of the page
     # cannot list or open other files of this machine.
@@ -80,8 +93,11 @@ else:
     elif names := list_images(str(folder)):
         name = st.selectbox(f"Image (first {MAX_LISTED:,} of the folder)", names, key="image_name")
         if inside(folder / name, data_root):
-            image = Image.open(folder / name)
-            image_id = f"file:{folder}/{name}"
+            try:
+                image = open_image(folder / name)
+                image_id = f"file:{folder}/{name}"
+            except UnreadableImageError as error:
+                st.error(str(error))
         else:
             st.error("This file is a link to a file outside the data folder.")
     else:
@@ -133,7 +149,11 @@ if image is not None:
             st.stop()
         with st.spinner("Detecting..."):
             start = time.perf_counter()
-            detections = loaded.detect(image, labels, threshold)
+            try:
+                detections = loaded.detect(image, labels, threshold)
+            except Exception as error:  # for example an image too small for the model
+                st.error(f"{model_name} failed on this image: {error}")
+                st.stop()
             seconds = time.perf_counter() - start
         unknown = models.unknown_labels(spec, labels)
         st.session_state["result"] = {
@@ -193,7 +213,7 @@ if image is not None:
                     hide_index=True,
                     alt="All detections, with score and box in pixels",
                 )
-                if spec.family == "grounding-dino":
+                if models.MODELS[result["model"]].family == "grounding-dino":
                     st.caption(
                         "A label of two or more prompt words, such as \"window door\", means that "
                         "Grounding DINO matched the box to each of them."

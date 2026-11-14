@@ -8,6 +8,7 @@ works on other plans. Code and weights are CC BY-NC 4.0, see LICENSE in this fol
 from __future__ import annotations
 
 import hashlib
+import math
 import ssl
 import urllib.request
 from pathlib import Path
@@ -17,6 +18,7 @@ from PIL import Image
 
 from chatchtg.detection.cubicasa.classes import ICON_CLASSES, ROOM_CLASSES, canonical_label
 from chatchtg.detection.detector import Detection
+from chatchtg.detection.images import to_rgb
 
 WEIGHTS_URL = (
     "https://drive.usercontent.google.com/download"
@@ -97,10 +99,12 @@ class CubiCasaDetector:
         wanted = {name for name in map(canonical_label, labels) if name}
         if not wanted:
             return []
-        image = image.convert("RGB")
+        image = to_rgb(image)
         scale = min(1.0, MAX_SIDE / max(image.size))
         if scale < 1:
-            image = image.resize((round(image.width * scale), round(image.height * scale)))
+            # At least 1 pixel: a very long, thin image would get a side of 0.
+            size = (max(1, round(image.width * scale)), max(1, round(image.height * scale)))
+            image = image.resize(size)
         detections = [
             Detection(label, score, tuple(value / scale for value in box))
             for label, score, box in self._find(image)
@@ -147,7 +151,10 @@ class CubiCasaDetector:
                 xs, ys = polygon[:, 0], polygon[:, 1]
                 box = (float(xs.min()), float(ys.min()), float(xs.max()), float(ys.max()))
                 # "prob" is the class evidence divided by the area. It can be a little above 1.
-                found.append((name, min(1.0, float(kind["prob"])), box))
+                # An opening without area gives inf or nan, which min() would turn into 1.0.
+                score = float(kind["prob"])
+                if math.isfinite(score):
+                    found.append((name, min(1.0, score), box))
         for polygon, kind in zip(room_polygons, room_types):
             name = ROOM_CLASSES[int(kind["class"])]
             if not name:

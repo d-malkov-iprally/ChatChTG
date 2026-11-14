@@ -13,6 +13,7 @@ from PIL import Image
 from chatchtg.config import Settings
 from chatchtg.detection.cubicasa.classes import CLASSES, canonical_label
 from chatchtg.detection.detector import Detection, Detector
+from chatchtg.detection.images import to_rgb
 
 
 @dataclass(frozen=True)
@@ -138,7 +139,7 @@ class HuggingFaceDetector:
     def detect(self, image: Image.Image, labels: list[str], threshold: float) -> list[Detection]:
         if not labels:
             return []
-        image = image.convert("RGB")
+        image = to_rgb(image)
         if self.spec.family == "owlv2":
             found = self._detect_owlv2(image, labels, threshold)
         elif self.spec.family == "sam3":

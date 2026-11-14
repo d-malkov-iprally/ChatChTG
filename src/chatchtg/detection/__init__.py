@@ -2,6 +2,7 @@
 
 from chatchtg.detection.detector import Detection, Detector, count_by_label, parse_labels
 from chatchtg.detection.drawing import draw_detections
+from chatchtg.detection.images import UnreadableImageError, open_image, to_rgb
 from chatchtg.detection.models import MODELS, ModelSpec, load_detector
 
 __all__ = [
@@ -9,8 +10,11 @@ __all__ = [
     "Detection",
     "Detector",
     "ModelSpec",
+    "UnreadableImageError",
     "count_by_label",
     "draw_detections",
     "load_detector",
+    "open_image",
     "parse_labels",
+    "to_rgb",
 ]

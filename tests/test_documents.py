@@ -1,6 +1,10 @@
 import pytest
 
-from chatchtg.documents.library import DocumentNotFoundError, UnsupportedDocumentError
+from chatchtg.documents.library import (
+    DocumentChangedError,
+    DocumentNotFoundError,
+    UnsupportedDocumentError,
+)
 from conftest import JPEG, PNG
 
 
@@ -99,3 +103,15 @@ def test_registering_again_adds_missing_attributes_only(library, data_root):
     assert again.attributes["source"] == "first"
     assert again.attributes["licence_file"] == "L.md"
     assert library.get(again.id).attributes == again.attributes
+
+
+def test_a_file_replaced_in_place_is_not_served_under_the_old_id(library, data_root):
+    path = data_root / "plan.png"
+    path.write_bytes(PNG + b"first")
+    old = library.register_file(path)
+    path.write_bytes(PNG + b"second")
+    new = library.register_file(path)
+
+    assert library.read(new.id) == PNG + b"second"
+    with pytest.raises(DocumentChangedError):
+        library.read(old.id)
