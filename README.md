@@ -49,7 +49,7 @@ uv run pytest
 A separate Streamlit page to try open-vocabulary detectors on a drawing: select an image, name the objects to find ("window, door"), and see the boxes and the count of each label.
 
 ```sh
-uv sync --extra detect                       # torch, torchvision, transformers and scipy, about 0.8 GB
+uv sync --extra detect                       # torch, transformers and the image libraries, about 0.8 GB
 uv run --extra detect chatchtg detect-demo   # start the demo at http://localhost:8501
 ```
 
@@ -57,6 +57,10 @@ uv run --extra detect chatchtg detect-demo   # start the demo at http://localhos
 - The demo is served to this machine only (`127.0.0.1`).
 - The models are Grounding DINO tiny and base, MM Grounding DINO base, OWLv2 base and large, and SAM 3. They run on this machine: on a CUDA GPU, on Apple MPS, or on the CPU.
 - The SAM 3 weights are gated. To use SAM 3, request access at https://huggingface.co/facebook/sam3 with your Hugging Face account, wait for the approval, then run `uv run --extra detect hf auth login`. Without access, the demo shows these steps and the other models still work.
+- CubiCasa5K is the floor-plan model of https://github.com/CubiCasa/CubiCasa5k. It is not open-vocabulary: it finds windows, doors, closets, electrical appliances, toilets, sinks, sauna benches, fire places, bathtubs and chimneys, and the rooms kitchen, living room, bed room, bath, entry, storage, garage and outdoor. The prompt selects which of these are shown. It has no class for showers.
+  - It was trained on the CubiCasa5K floor plans. Most `cubicasa5k` images of the benchmark are images that it was trained on, so its results there are better than on other plans. Use `swiss_dwellings` to see how well it works on plans that it has not seen.
+  - The first use downloads its weights (209 MB) from the Google Drive link of that project into `var/models`. The file is checked against a SHA-256 value.
+  - Its code is in `src/chatchtg/detection/cubicasa`. Code and weights are CC BY-NC 4.0 (non-commercial), see the `LICENSE` file of that folder.
 - SAM 3.1 is not included. It changes the video tracker of SAM 3, and its weights do not load with `transformers`.
 - The first use of a model downloads its weights from the Hugging Face hub. That can take some minutes.
 - "Minimum score" removes detections below that score. Scores of different models are not comparable: OWLv2 gives much lower scores than Grounding DINO, so its default is 0.10 and not 0.25.

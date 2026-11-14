@@ -8,6 +8,7 @@ import chatchtg.ui
 from chatchtg.cli import main
 from chatchtg.detection import MODELS, Detection, count_by_label, draw_detections, parse_labels
 from chatchtg.detection import models
+from chatchtg.detection.cubicasa.classes import CLASSES, canonical_label
 
 # Not imported as a module: an import runs the script outside Streamlit, and its open form
 # then breaks the forms of the other app's test.
@@ -43,7 +44,8 @@ def test_draw_detections_draws_the_box_and_keeps_the_original():
 
 
 def test_every_model_has_a_known_family():
-    assert {spec.family for spec in MODELS.values()} == {"grounding-dino", "owlv2", "sam3"}
+    families = {spec.family for spec in MODELS.values()}
+    assert families == {"grounding-dino", "owlv2", "sam3", "cubicasa"}
 
 
 def test_cli_has_the_detect_demo_command(monkeypatch):
@@ -146,3 +148,39 @@ def test_app_refuses_more_labels_than_the_limit(tmp_path, monkeypatch):
         "Name at most 20 objects. The prompt has 21."
     ]
     assert fake.calls == []
+
+
+def test_canonical_label_knows_the_classes_and_their_other_names():
+    assert canonical_label("Door") == "door"
+    assert canonical_label("windows") == "window"
+    assert canonical_label("bedroom") == "bed room"
+    assert canonical_label("Bed Room") == "bed room"
+    assert canonical_label("washbasin") == "sink"
+    assert canonical_label("sauna") == "sauna bench"
+    assert canonical_label("shower") is None
+    assert all(canonical_label(name) == name for name in CLASSES)
+
+
+def test_unknown_labels_are_reported_for_a_model_with_fixed_classes_only():
+    labels = ["door", "shower", "bedroom"]
+    assert models.unknown_labels(MODELS["CubiCasa5K"], labels) == ["shower"]
+    assert models.unknown_labels(MODELS["OWLv2 base"], labels) == []
+
+
+def test_app_names_the_labels_that_the_fixed_class_model_does_not_know(tmp_path, monkeypatch):
+    Image.new("RGB", (64, 48), "white").save(tmp_path / "plan.png")
+    monkeypatch.setenv("CHATCHTG_DATA_ROOT", str(tmp_path))
+    fake = FakeDetector()
+    monkeypatch.setattr(models, "load_detector", lambda name: fake)
+
+    app = AppTest.from_file(APP, default_timeout=30).run()
+    app.segmented_control(key="source").set_value("Dataset folder").run()
+    app.segmented_control(key="model").set_value("CubiCasa5K").run()
+    assert any("is not open-vocabulary" in caption.value for caption in app.caption)
+
+    app.text_input(key="prompt").set_value("door, shower")
+    app.button[0].click().run()
+
+    assert not app.exception
+    assert [warning.value for warning in app.warning] == ["CubiCasa5K does not know: shower."]
+    assert app.metric[0].value == "2"

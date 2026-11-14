@@ -91,6 +91,12 @@ model_name = st.segmented_control(
     "Model", list(models.MODELS), default=next(iter(models.MODELS)), required=True, key="model"
 )
 spec = models.MODELS[model_name]
+if spec.classes:
+    st.caption(
+        f"{model_name} is not open-vocabulary. It finds only: {', '.join(spec.classes)}. "
+        "It was trained on the CubiCasa5K floor plans, so its results on those plans are "
+        "better than on other plans."
+    )
 
 with st.form("detect"):
     prompt = st.text_input(
@@ -129,7 +135,9 @@ if image is not None:
             start = time.perf_counter()
             detections = loaded.detect(image, labels, threshold)
             seconds = time.perf_counter() - start
+        unknown = models.unknown_labels(spec, labels)
         st.session_state["result"] = {
+            "unknown": unknown,
             "image_id": image_id,
             "model": model_name,
             "labels": labels,
@@ -164,6 +172,8 @@ if image is not None:
                 f"{result['model']} · minimum score {result['threshold']:.2f} · "
                 f"{result['seconds']:.1f} s · prompt: {', '.join(result['labels'])}"
             )
+            if result["unknown"]:
+                st.warning(f"{result['model']} does not know: {', '.join(result['unknown'])}.")
             if detections:
                 counts = count_by_label(detections)
                 st.dataframe(

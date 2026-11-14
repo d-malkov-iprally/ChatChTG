@@ -10,6 +10,8 @@ from dataclasses import dataclass
 
 from PIL import Image
 
+from chatchtg.config import Settings
+from chatchtg.detection.cubicasa.classes import CLASSES, canonical_label
 from chatchtg.detection.detector import Detection, Detector
 
 
@@ -17,13 +19,15 @@ from chatchtg.detection.detector import Detection, Detector
 class ModelSpec:
     name: str
     family: str
-    """"grounding-dino", "owlv2" or "sam3": it selects the prompt format and the post-processing."""
+    """"grounding-dino", "owlv2", "sam3" or "cubicasa": it selects how the model is run."""
     checkpoint: str
-    """The model's id on the Hugging Face hub."""
+    """The model's id on the Hugging Face hub, or the address of its project."""
     default_threshold: float
     """A starting threshold. OWLv2 gives much lower scores than Grounding DINO."""
     gated: bool = False
     """True if the weights need an accepted licence and a Hugging Face login."""
+    classes: tuple[str, ...] = ()
+    """The only classes that the model finds. Empty for an open-vocabulary model."""
 
 
 MODELS: dict[str, ModelSpec] = {
@@ -42,6 +46,8 @@ MODELS: dict[str, ModelSpec] = {
         # SAM 3.1 (March 2026) changes the video tracker and has no transformers weights.
         # For one image and a text prompt, SAM 3 is the newest SAM that transformers loads.
         ModelSpec("SAM 3", "sam3", "facebook/sam3", 0.3, gated=True),
+        # Not open-vocabulary: a floor-plan model with fixed classes. It is here to compare.
+        ModelSpec("CubiCasa5K", "cubicasa", "https://github.com/CubiCasa/CubiCasa5k", 0.2, classes=CLASSES),
     ]
 }
 
@@ -78,6 +84,8 @@ def load_detector(name: str, device: str | None = None) -> Detector:
         raise MissingDependencyError(
             "The detectors need torch and transformers. Install them with `uv sync --extra detect`."
         ) from error
+    if spec.family == "cubicasa":
+        return _load_cubicasa(device or default_device())
     try:
         return HuggingFaceDetector(spec, device or default_device())
     except OSError as error:
@@ -89,6 +97,31 @@ def load_detector(name: str, device: str | None = None) -> Detector:
             f"https://huggingface.co/{spec.checkpoint}, wait for the approval, then log in "
             f"with `uv run --extra detect hf auth login`. The error was: {error}"
         ) from error
+
+
+def _load_cubicasa(device: str) -> Detector:
+    try:
+        from chatchtg.detection import cubicasa
+
+        # Import now what the detector imports at its first detection.
+        from chatchtg.detection.cubicasa import postprocessing  # noqa: F401
+    except ImportError as error:
+        raise MissingDependencyError(
+            "The CubiCasa5K model needs scikit-image and shapely. "
+            "Install them with `uv sync --extra detect`."
+        ) from error
+    try:
+        weights = cubicasa.ensure_weights(Settings.from_env().state_dir / "models")
+    except cubicasa.WeightsError as error:
+        raise DetectorUnavailableError(str(error)) from error
+    return cubicasa.CubiCasaDetector(weights, device)
+
+
+def unknown_labels(spec: ModelSpec, labels: list[str]) -> list[str]:
+    """The labels that a model with fixed classes does not know. Empty for the other models."""
+    if not spec.classes:
+        return []
+    return [label for label in labels if canonical_label(label) is None]
 
 
 class HuggingFaceDetector:
