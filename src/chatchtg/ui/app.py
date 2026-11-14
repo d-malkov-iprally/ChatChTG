@@ -78,24 +78,6 @@ def inject_styles() -> None:
         .primary-nav .active { color: #fff; background: linear-gradient(135deg, #62558f, #413d65); box-shadow: inset 0 0 0 1px rgba(222, 210, 255, 0.15); }
         .window-actions { margin-left: auto; color: #c7cede; letter-spacing: 1.35rem; font-size: 1.08rem; white-space: nowrap; }
 
-        .tool-ribbon {
-            display: flex; gap: 0.48rem; align-items: stretch; flex-wrap: wrap;
-            margin-bottom: 0.55rem; padding: 0.48rem; background: rgba(250, 251, 255, 0.96);
-            border: 1px solid rgba(199, 207, 225, 0.82); border-radius: 0.55rem;
-            box-shadow: 0 8px 20px rgba(3, 9, 24, 0.15);
-        }
-        .tool-group { display: flex; gap: 0.33rem; padding-right: 0.52rem; border-right: 1px solid #e2e6ef; }
-        .tool-group:last-child { border-right: 0; }
-        .tool-button {
-            display: grid; grid-template-columns: 1.35rem auto 0.75rem; align-items: center; gap: 0.38rem;
-            min-height: 2.05rem; padding: 0.2rem 0.58rem; color: #33405a; background: #fff;
-            border: 1px solid transparent; border-radius: 0.38rem; font-size: 0.84rem; font-weight: 620;
-        }
-        .tool-button.active { color: #342b57; background: #eeeaff; border-color: #d9d0f5; box-shadow: 0 2px 7px rgba(91, 66, 168, 0.12); }
-        .tool-icon { color: var(--violet-deep); font-size: 1.02rem; text-align: center; }
-        .tool-caret { color: #808aa0; font-size: 0.7rem; }
-        .source-caption { margin: 0.05rem 0 0.25rem 0.15rem; color: #c6cede; font-size: 0.68rem; letter-spacing: 0.13em; font-weight: 700; }
-
         div[data-testid="stRadio"] { margin: 0.05rem 0 0.6rem; }
         div[data-testid="stRadio"] label {
             color: #edf1fa !important; font-size: 0.83rem !important; padding: 0.3rem 0.54rem;
@@ -148,12 +130,6 @@ def inject_styles() -> None:
         .st-key-assistant_panel [data-testid="stCaptionContainer"] { color: #727c91; font-size: 0.7rem; }
         .st-key-assistant_panel .stMarkdown { color: #273148; font-size: 0.91rem; line-height: 1.55; }
 
-        .st-key-command_bar { margin-top: 0.72rem; padding: 0.1rem 0.2rem; border: 1px solid rgba(198, 207, 226, 0.44); border-radius: 0.45rem; background: rgba(18, 25, 38, 0.9); }
-        .command-line { display: flex; align-items: center; gap: 0.75rem; min-height: 2.45rem; padding: 0 0.85rem; color: #acb7cb; font-size: 0.86rem; }
-        .command-prompt { color: #d4c4ff; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1.18rem; }
-        .command-line em { color: #8f9aad; }
-        .command-hint { margin-left: auto; padding: 0.22rem 0.48rem; color: #b8c1d3; border: 1px solid rgba(181, 193, 217, 0.28); border-radius: 0.25rem; font-size: 0.67rem; font-style: normal; }
-
         .empty-state { padding: 2.6rem 1.5rem; text-align: center; color: #dce3f2; border: 1px dashed rgba(183, 196, 226, 0.42); border-radius: 0.5rem; background: rgba(13, 19, 30, 0.5); }
         .empty-state strong { display: block; margin-bottom: 0.45rem; color: #fff; font-size: 1.05rem; }
         .empty-state span { color: #aebbd0; font-size: 0.9rem; }
@@ -181,24 +157,12 @@ def render_header() -> None:
           <div class="primary-nav"><span class="active">Analyze</span><span>Documents</span></div>
           <div class="window-actions">— □ ×</div>
         </div>
-        <div class="tool-ribbon">
-          <div class="tool-group">
-            <span class="tool-button active"><span class="tool-icon">⌗</span>Count<span class="tool-caret">⌄</span></span>
-            <span class="tool-button"><span class="tool-icon">∠</span>Area<span class="tool-caret">⌄</span></span>
-          </div>
-          <div class="tool-group">
-            <span class="tool-button"><span class="tool-icon">▯</span>Doors<span class="tool-caret">⌄</span></span>
-            <span class="tool-button"><span class="tool-icon">⊞</span>Windows<span class="tool-caret">⌄</span></span>
-            <span class="tool-button"><span class="tool-icon">▧</span>Rooms<span class="tool-caret">⌄</span></span>
-          </div>
-        </div>
         """,
         unsafe_allow_html=True,
     )
 
 
 def render_document_picker(library):
-    st.markdown('<div class="source-caption">OPEN DRAWING</div>', unsafe_allow_html=True)
     source = st.radio(
         "Document",
         ["Upload an image", "Registered document"],
@@ -295,13 +259,6 @@ def render_workspace(document, library, answer_service) -> None:
                 st.markdown('<div class="assistant-answer-label">Drawing answer</div>', unsafe_allow_html=True)
                 st.markdown(response.text)
                 st.caption(f"Composer: {response.composer} · Model: {response.model}")
-
-    with st.container(key="command_bar", border=False):
-        st.markdown(
-            '<div class="command-line"><span class="command-prompt">›_</span><em>Type a command or ask the assistant…</em><span class="command-hint">⌘ ENTER</span></div>',
-            unsafe_allow_html=True,
-        )
-
 
 def render_empty_workspace() -> None:
     with st.container(key="drawing_canvas", border=False):
