@@ -245,11 +245,16 @@ def evaluate(run_name: str, dataset: str = "cubicasa-v1", limit: int = 0) -> Non
         for index, row in enumerate(images):
             with Image.open(dataset_dir / split / row["file_name"]) as picture:
                 detections = model.predict(picture.convert("RGB"), threshold=0.1)
+            # RF-DETR gives the class name of each detection. A class id is not an index
+            # into model.class_names.
+            labels = detections.data["class_name"]
+            if index == 0:
+                print("first image: class ids", sorted(set(map(int, detections.class_id))),
+                      "names", sorted(set(map(str, labels))), flush=True)
             found[row["file_name"]] = [
-                {"label": names[int(class_id)], "score": float(score), "box": [float(v) for v in box]}
-                for box, score, class_id in zip(
-                    detections.xyxy, detections.confidence, detections.class_id
-                )
+                {"label": str(label), "score": float(score), "box": [float(v) for v in box]}
+                for box, score, label in zip(detections.xyxy, detections.confidence, labels)
+                if str(label) in CLASSES
             ]
             if index % 50 == 0:
                 print(f"{split}: {index} of {len(images)}", flush=True)
