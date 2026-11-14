@@ -41,6 +41,7 @@ The pre-commit hook (`.githooks/pre-commit`) runs `uv run pytest` and aborts the
 uv run chatchtg serve                                  # Streamlit app
 uv run chatchtg ingest data/preview                    # register the dataset's PNG/JPEG drawings
 uv run chatchtg eval data/preview --limit 50           # answer and score dataset questions
+uv run chatchtg eval data/floorplans --questions questions-subset.jsonl --sample 100 --max-cost 4
 uv run pytest
 ```
 
@@ -79,6 +80,8 @@ Answers come from a fake LLM unless you select a provider. To use Claude:
 CHATCHTG_LLM_PROVIDER=claude uv run chatchtg serve
 CHATCHTG_LLM_PROVIDER=claude CHATCHTG_LLM_MODEL=claude-haiku-5-5 uv run chatchtg eval data/preview --limit 50
 ```
+
+`--sample N` answers N questions, balanced over source and question type; `--seed` changes the pick. `--max-cost` stops the run before its cost passes that many US dollars. Each result line records the token usage and the cost of its answer. If a run is interrupted, run the same command again with the same `--out` file and `--resume`: it keeps the answers and asks only the remaining questions.
 
 Claude needs an Anthropic key, and each request is billed to that key's account. Keep the key in this project:
 

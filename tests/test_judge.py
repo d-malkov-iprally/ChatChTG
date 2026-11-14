@@ -166,7 +166,7 @@ def test_run_eval_adds_the_judge_result_next_to_the_rule(dataset, library, tmp_p
     judge = RecordingJudge(reader=lambda _: 4.0)
     out_path = tmp_path / "result.jsonl"
 
-    summary = run_eval(dataset, library, service, out_path, judge=judge)
+    summary = run_eval(dataset, library, service, out_path, judge=judge).summary
 
     assert summary == {
         "count": {"total": 1, "scored": 1, "correct": 0, "judged": 1, "judge_correct": 1, "disagree": 1},
@@ -193,7 +193,7 @@ def test_a_judge_error_is_not_counted_as_a_wrong_answer(dataset, library, tmp_pa
     service = AnswerService(library, BaselineComposer(), FakeLLM(reply="The answer is 4"))
     out_path = tmp_path / "result.jsonl"
 
-    summary = run_eval(dataset, library, service, out_path, judge=FakeJudge(error="refusal"))
+    summary = run_eval(dataset, library, service, out_path, judge=FakeJudge(error="refusal")).summary
 
     assert summary["count"] == {
         "total": 1, "scored": 1, "correct": 1, "judged": 0, "judge_correct": 0, "disagree": 0
@@ -206,7 +206,7 @@ def test_a_judge_error_is_not_counted_as_a_wrong_answer(dataset, library, tmp_pa
 def test_run_eval_without_a_judge_writes_no_judge_fields(dataset, library, service, tmp_path):
     out_path = tmp_path / "result.jsonl"
 
-    summary = run_eval(dataset, library, service, out_path)
+    summary = run_eval(dataset, library, service, out_path).summary
 
     assert summary["count"] == {"total": 1, "scored": 1, "correct": 0}
     assert not any("judge" in key for key in json.loads(out_path.read_text().splitlines()[0]))
@@ -232,3 +232,26 @@ def test_cli_eval_without_judge_prints_no_judge_columns(dataset, tmp_path, monke
     assert main(["eval", str(dataset), "--out", str(tmp_path / "result.jsonl")]) == 0
 
     assert "disagree" not in capsys.readouterr().out
+
+
+def test_run_eval_counts_the_cost_of_the_judge_and_resumes_its_counts(dataset, library, tmp_path):
+    class MeteredJudge(FakeJudge):
+        def read(self, question, unit, response):
+            judgement = super().read(question, unit, response)
+            return judgement.model_copy(
+                update={"model": "claude-haiku-5-5", "usage": {"input_tokens": 1_000_000}}
+            )
+
+    service = AnswerService(library, BaselineComposer(), FakeLLM(reply="The answer is 4"))
+    out_path = tmp_path / "result.jsonl"
+    judge = MeteredJudge(reader=lambda _: 4.0)
+
+    first = run_eval(dataset, library, service, out_path, judge=judge, limit=1)
+    resumed = run_eval(dataset, library, service, out_path, judge=judge, resume=True)
+
+    assert first.cost_usd == pytest.approx(0.10)
+    assert json.loads(out_path.read_text().splitlines()[0])["judge_cost_usd"] == pytest.approx(0.10)
+    # Two questions are judged. The cost and the counts include the answer kept from the first run.
+    assert resumed.cost_usd == pytest.approx(0.20)
+    assert resumed.summary["count"]["judged"] == 1
+    assert resumed.summary["area"]["judged"] == 1
