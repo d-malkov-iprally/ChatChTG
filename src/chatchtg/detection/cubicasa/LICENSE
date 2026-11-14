@@ -1,0 +1,11 @@
+The files model.py, postprocessing.py and rotation.py of this folder come from CubiCasa5K,
+https://github.com/CubiCasa/CubiCasa5k, with the changes named at the top of each file.
+The trained weights that the detector downloads are the weights of that project.
+
+CubiCasa5K is licensed under a
+Creative Commons Attribution-NonCommercial 4.0 International License.
+
+Copyright (c) 2019
+
+You should have received a copy of the license along with this
+work. If not, see <http://creativecommons.org/licenses/by-nc/4.0/>.
