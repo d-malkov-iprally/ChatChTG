@@ -63,6 +63,8 @@ def inject_styles() -> None:
             box-shadow: 0 12px 36px rgba(0, 0, 0, 0.22);
         }
         .brand-mark { display: flex; align-items: center; gap: 0.68rem; min-width: 12.5rem; }
+        .brand-compass { width: 1.55rem; height: 1.55rem; color: #c7afff; filter: drop-shadow(0 2px 5px rgba(161, 122, 234, 0.32)); }
+        .brand-compass path, .brand-compass circle { vector-effect: non-scaling-stroke; }
         .brand-name { font-size: 1.14rem; font-weight: 740; letter-spacing: -0.02em; }
         .primary-nav { display: flex; gap: 0.36rem; height: 100%; align-items: center; }
         .primary-nav span { color: #c5cad9; padding: 0.55rem 1rem; border-radius: 0.35rem; font-size: 0.94rem; }
@@ -149,7 +151,12 @@ def render_header() -> None:
     st.markdown(
         """
         <div class="top-chrome">
-          <div class="brand-mark"><span class="brand-name">ChatChTG</span></div>
+          <div class="brand-mark">
+            <svg class="brand-compass" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="4.5" r="1.8"></circle><path d="M10.8 5.9 5.9 20"></path><path d="m13.2 5.9 4.9 14.1"></path><path d="M8.3 13.2h7.4"></path><path d="m5.9 20 2.3-2.2"></path><path d="m18.1 20-2.3-2.2"></path>
+            </svg>
+            <span class="brand-name">ChatChTG</span>
+          </div>
           <div class="primary-nav"><span class="active">Analyze</span><span>Documents</span></div>
         </div>
         """,
