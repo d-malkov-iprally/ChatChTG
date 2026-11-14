@@ -24,6 +24,8 @@ class Settings:
     """The provider's model. None means the adapter's default."""
     anthropic_api_key: str | None = field(default=None, repr=False)
     """This project's Anthropic key. None means the Anthropic SDK's own credential lookup."""
+    judge_model: str | None = None
+    """The model of the eval judge. None means the judge's default."""
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Settings:
@@ -42,4 +44,5 @@ class Settings:
             llm_provider=env.get("CHATCHTG_LLM_PROVIDER", "fake"),
             llm_model=env.get("CHATCHTG_LLM_MODEL") or None,
             anthropic_api_key=env.get("CHATCHTG_ANTHROPIC_API_KEY") or None,
+            judge_model=env.get("CHATCHTG_JUDGE_MODEL") or None,
         )

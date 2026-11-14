@@ -35,6 +35,22 @@ uv run chatchtg eval data/floorplans                   # all 123,098 questions
 
 `data/floorplans` holds the PNG floor plans of the `cubicasa5k` and `swiss_dwellings` sources that have questions, their licence files, `questions.jsonl` and `questions-subset.jsonl`. The folder has the layout of a downloaded dataset and contains its own images, so it can be copied to another machine. The subset is balanced over source and question type; the same `--seed` and `--subset-size` always give the same subset. Building again copies only the files that are missing.
 
+### Judge
+
+The eval scores an answer with a rule: it takes the last number in the answer and compares it with the reference answer ([ADR 0002](docs/ADR/0002-plain-llm-as-baseline.md)). The last number is not always the answer: in "13 windows, 2 of them on floor 1" the rule reads 2. Add `--judge` to also have a small model read each answer:
+
+```sh
+uv run chatchtg eval data/floorplans --questions questions-subset.jsonl --judge
+```
+
+- The judge gets the question, the expected unit and the answer. It reports the number that the answer commits to, or that the answer gives no number. It does not see the reference answer and it does not decide if the answer is correct.
+- Code compares the judge's number with the reference answer under the same rules: counts exact, measures within 2%.
+- The judge reads only the answers that the rule can score. It makes one more LLM call for each of them.
+- `correct` and `accuracy` stay the result of the rule. That is the score to compare between runs. The judge adds the columns `judged`, `judge ok`, `judge acc` and `disagree` (answers where rule and judge give a different result), and the fields `judge_model`, `judge_value`, `judge_unit`, `judge_quote`, `judge_correct`, `judge_error` and `judge_usage` to each result row.
+- A judge call that fails sets `judge_error` and leaves `judge_correct` empty. It is not counted as a wrong answer.
+
+With the `fake` provider the judge is fake too and makes no LLM call.
+
 Answers come from a fake LLM unless you select a provider. To use Claude:
 
 ```sh
@@ -64,6 +80,7 @@ Set these in the shell or in `.env`:
 | `CHATCHTG_LLM_PROVIDER` | `fake` | LLM adapter: `fake` or `claude` |
 | `CHATCHTG_ANTHROPIC_API_KEY` | not set | this project's Anthropic key, used instead of `ANTHROPIC_API_KEY` |
 | `CHATCHTG_LLM_MODEL` | adapter's default | model the adapter calls; for `claude` the default is `claude-opus-5-5` |
+| `CHATCHTG_JUDGE_MODEL` | `claude-haiku-5-5` | model that reads the answers for `eval --judge` |
 
 ## Architecture
 
@@ -85,5 +102,6 @@ blobs.py   metadata.py
 - **LLM** (`llm/`): `LLMClient.complete(Context) -> Completion`. To add a provider, write one adapter and add a branch to `build_llm`.
   - `fake` (`llm/fake.py`): a deterministic stand-in for tests and offline runs.
   - `claude` (`llm/claude.py`): sends the system prompt and one user message (the images and text, in order) to the Anthropic Messages API. The completion records the model that served the request and the token usage. If the model declines a request, the API retries it on a fallback model; if that also declines, the answer says so and the run continues.
+- **Judge** (`evals/judge.py`): `Judge.read(question, unit, response) -> Judgement`. It is separate from `LLMClient` because it is not the system that the eval measures.
 - **Interface** (`ui/app.py`): holds no logic. The eval runner calls the same `AnswerService`, not the UI.
 - **Schemas** (`schemas.py`): the request and response of an interaction. Add new fields as optional.
