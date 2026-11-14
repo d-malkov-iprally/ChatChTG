@@ -7,8 +7,11 @@ The challenge this answers is recorded in [docs/challenge.md](docs/challenge.md)
 
 ```sh
 uv sync
+git config core.hooksPath .githooks   # enable the pre-commit hook
 scripts/download_data.sh preview      # optional: the dataset, into data/preview
 ```
+
+The pre-commit hook (`.githooks/pre-commit`) runs `uv run pytest` and aborts the commit if a test fails. It also refuses commits on `main`: work on a branch and open a PR. The hook tests the files as they are on disk, including changes that are not staged.
 
 ## Run
 

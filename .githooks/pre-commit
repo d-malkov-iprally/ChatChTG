@@ -1,0 +1,21 @@
+#!/bin/sh
+# Runs before every commit. Enable once per clone:
+#   git config core.hooksPath .githooks
+# Skip it for one commit with: git commit --no-verify
+
+branch=$(git symbolic-ref --short -q HEAD)
+if [ "$branch" = "main" ]; then
+    echo "pre-commit: commits to main are not allowed. Create a branch and open a PR." >&2
+    exit 1
+fi
+
+# Git exports GIT_DIR, GIT_INDEX_FILE and similar to hooks. Tests that run git
+# themselves must not inherit them.
+unset $(git rev-parse --local-env-vars)
+
+cd "$(git rev-parse --show-toplevel)" || exit 1
+echo "pre-commit: running tests"
+if ! uv run --quiet pytest -q; then
+    echo "pre-commit: tests failed, commit aborted." >&2
+    exit 1
+fi
