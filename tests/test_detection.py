@@ -128,3 +128,21 @@ def test_app_tells_how_to_get_access_to_a_gated_model(tmp_path, monkeypatch):
         "SAM 3 could not be loaded. Its weights are gated."
     ]
     assert app.slider[0].value == 0.3
+
+
+def test_app_refuses_more_labels_than_the_limit(tmp_path, monkeypatch):
+    Image.new("RGB", (64, 48), "white").save(tmp_path / "plan.png")
+    monkeypatch.setenv("CHATCHTG_DATA_ROOT", str(tmp_path))
+    fake = FakeDetector()
+    monkeypatch.setattr(models, "load_detector", lambda name: fake)
+
+    app = AppTest.from_file(APP, default_timeout=30).run()
+    app.segmented_control(key="source").set_value("Dataset folder").run()
+    app.text_input(key="prompt").set_value(", ".join(f"object {n}" for n in range(21)))
+    app.button[0].click().run()
+
+    assert not app.exception
+    assert [warning.value for warning in app.warning] == [
+        "Name at most 20 objects. The prompt has 21."
+    ]
+    assert fake.calls == []

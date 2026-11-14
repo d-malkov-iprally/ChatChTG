@@ -14,6 +14,8 @@ from chatchtg.detection import count_by_label, draw_detections, models, parse_la
 from chatchtg.documents.library import RASTER_SUFFIXES
 
 MAX_LISTED = 2000
+# SAM 3 runs the model once for each label, so the number of labels limits the work.
+MAX_LABELS = 20
 
 st.set_page_config(page_title="Detection demo", layout="wide")
 
@@ -94,7 +96,8 @@ with st.form("detect"):
     prompt = st.text_input(
         "Objects to detect",
         value="window, door",
-        help="Separate the objects with commas. Short English nouns work best.",
+        help=f"Separate the objects with commas, at most {MAX_LABELS}. Short English nouns work best.",
+        max_chars=500,
         key="prompt",
     )
     threshold = st.slider(
@@ -113,6 +116,8 @@ if image is not None:
     labels = parse_labels(prompt)
     if submitted and not labels:
         st.warning("Name at least one object to detect.")
+    elif submitted and len(labels) > MAX_LABELS:
+        st.warning(f"Name at most {MAX_LABELS} objects. The prompt has {len(labels)}.")
     elif submitted:
         try:
             with st.spinner(f"Loading {model_name}. The first load downloads the weights."):
