@@ -36,7 +36,7 @@ GROUPS = {
     "bath": ("bad", "bain", "bagno"),
     "kitchen": ("küche", "cuisine", "cucina"),
 }
-SIZES = ((0.0, 4.0, "under 4 m²"), (4.0, 8.0, "4 to 8 m²"), (8.0, 15.0, "8 to 15 m²"), (15.0, 1e9, "over 15 m²"))
+SIZES = ((float("-inf"), 4.0, "under 4 m²"), (4.0, 8.0, "4 to 8 m²"), (8.0, 15.0, "8 to 15 m²"), (15.0, float("inf"), "over 15 m²"))
 
 
 def group_of(name: str | None) -> str:
