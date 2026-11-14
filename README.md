@@ -58,6 +58,34 @@ uv run chatchtg eval data/floorplans                   # all 123,098 questions
 
 `data/floorplans` holds the PNG floor plans of the `cubicasa5k` and `swiss_dwellings` sources that have questions, their licence files, `questions.jsonl` and `questions-subset.jsonl`. The folder has the layout of a downloaded dataset and contains its own images, so it can be copied to another machine. The subset is balanced over source and question type; the same `--seed` and `--subset-size` always give the same subset. Building again copies only the files that are missing.
 
+### Area questions
+
+The `areas` composer answers area questions on Swiss floor plans from a room table that it builds from the PNG, with no LLM call for the measuring:
+
+```sh
+CHATCHTG_COMPOSER=areas uv run chatchtg serve
+uv run chatchtg eval data/floorplans --questions questions-subset.jsonl --composer areas
+```
+
+- **Labels** (`areas/labels.py`): local OCR reads the scale, the room numbers, names, printed areas and apartment tags.
+- **Membership** (`areas/membership.py`): a grey floor marks an outdoor room; the red outlines assign rooms to apartments.
+- **Areas** (`areas/measure.py`): a printed area is used where there is one. Otherwise the room is measured: its outline is found from the drawn lines and each edge is placed at the centre of its line, to a fraction of a pixel.
+- **Answer** (`areas/questions.py`): the question is parsed (English, German, French, Italian) and the areas are added up in code.
+
+The LLM gets the result as text, without the image, and states it. It gets the image and the room table when the pipeline cannot answer. Other questions are composed as in the baseline. The first question on a drawing takes several seconds of CPU for the OCR; later questions on the same drawing reuse the analysis.
+
+To score the pipeline without any LLM call:
+
+```sh
+uv sync --dev                                   # ezdxf and shapely, for the ground truth
+uv run python scripts/build_room_truth.py       # room areas from the DXF twins, into var/room-truth
+uv run python scripts/eval_areas.py --plans 100 # answers the area questions of 100 plans in code
+uv run python scripts/eval_labels.py 20 20      # the label reader alone
+uv run python scripts/eval_membership.py        # the aggregation rules and apartment membership alone
+```
+
+The DXF files are used only to score and to explain errors, never to answer ([ADR 0003](docs/ADR/0003-floor-plans-only.md)). Results are in [docs/benchmarks](docs/benchmarks/).
+
 ### Judge
 
 The eval scores an answer with a rule: it takes the last number in the answer and compares it with the reference answer ([ADR 0002](docs/ADR/0002-plain-llm-as-baseline.md)). The last number is not always the answer: in "13 windows, 2 of them on floor 1" the rule reads 2. Add `--judge` to also have a small model read each answer:
@@ -101,7 +129,7 @@ Set these in the shell or in `.env`:
 |---|---|---|
 | `CHATCHTG_DATA_ROOT` | `data` | root of the downloaded datasets |
 | `CHATCHTG_STATE_DIR` | `var` | where state is written |
-| `CHATCHTG_COMPOSER` | `baseline` | context composer used by the app |
+| `CHATCHTG_COMPOSER` | `baseline` | context composer used by the app: `baseline` or `areas` |
 | `CHATCHTG_LLM_PROVIDER` | `fake` | LLM adapter: `fake` or `claude` |
 | `CHATCHTG_ANTHROPIC_API_KEY` | not set | this project's Anthropic key, used instead of `ANTHROPIC_API_KEY` |
 | `CHATCHTG_LLM_MODEL` | adapter's default | model the adapter calls; for `claude` the default is `claude-opus-5-5` |

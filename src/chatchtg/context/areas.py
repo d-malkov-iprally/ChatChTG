@@ -72,7 +72,12 @@ class AreaComposer:
         except Exception:  # an image the pipeline cannot read is answered as in the baseline
             return self._baseline.compose(request)
         answer = answer_query(query, analysis.rows())
-        if answer.value is not None and not analysis.missing_numbers_matter(query.kind):
+        # A total may lack a room whose label was not read. On a plan that prints its areas
+        # the LLM reads the labels reliably, so it gets the image then. On a plan without
+        # printed areas it would have to estimate, and the tool's total is the better answer
+        # (measured: right 3 times of 4 even with a gap in the numbering).
+        doubtful = analysis.may_be_incomplete(query.kind) and analysis.prints_areas()
+        if answer.value is not None and not doubtful:
             return Context(
                 system=AREA_SYSTEM_PROMPT,
                 parts=[TextPart(text=result_text(analysis, answer)), TextPart(text=request.message)],

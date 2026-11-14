@@ -63,9 +63,14 @@ class PlanAnalysis:
             for r in self.rooms
         ]
 
-    def missing_numbers_matter(self, kind: str) -> bool:
-        """True when a room that was not read could change the answer to this kind of
-        question: any total may lack it, a single room that was found does not."""
+    def prints_areas(self) -> bool:
+        """True when the plan prints the area under most room labels."""
+        printed = sum(room.printed_area is not None for room in self.rooms)
+        return printed * 2 > len(self.rooms)
+
+    def may_be_incomplete(self, kind: str) -> bool:
+        """True when a room whose label was not read could change the answer to this kind
+        of question: any total may lack it, a single room that was found does not."""
         return kind != "room" and bool(self.missing_numbers)
 
     def to_json(self) -> dict:

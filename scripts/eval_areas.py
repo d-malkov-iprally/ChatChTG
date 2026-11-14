@@ -20,6 +20,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+from chatchtg.areas import labels
 from chatchtg.areas.pipeline import PlanAnalysis, analyse_plan
 from chatchtg.areas.questions import answer_query, parse_question
 
@@ -31,6 +32,7 @@ TOLERANCE = 0.02
 
 
 def analyse(stem: str) -> dict:
+    labels.OCR_THREADS = 2  # several plans are read side by side
     image = np.array(Image.open(PLANS / f"{stem}.png").convert("RGB"))
     return analyse_plan(image).to_json()
 
@@ -62,6 +64,7 @@ def main() -> None:
     parser.add_argument("--workers", type=int, default=6)
     parser.add_argument("--refresh", action="store_true", help="analyse again, ignore the cache")
     parser.add_argument("--exclude", type=Path, help="file with one plan stem per line to leave out")
+    parser.add_argument("--results", type=Path, help="an eval-run file: score its area questions, next to its own answers")
     parser.add_argument("--out", type=Path, default=Path("var/eval-areas.jsonl"))
     args = parser.parse_args()
 
@@ -71,6 +74,16 @@ def main() -> None:
             row = json.loads(line)
             if row["type"] == "area":
                 questions[Path(row["path"]).stem].append(row)
+    baseline: dict[tuple[str, str], bool] = {}
+    if args.results:
+        questions.clear()
+        for line in args.results.read_text(encoding="utf-8").splitlines():
+            row = json.loads(line)
+            if row["type"] == "area":
+                stem = Path(row["path"]).stem
+                questions[stem].append({"question": row["question"], "answer": row["expected"]})
+                baseline[(stem, row["question"])] = bool(row["correct"])
+        args.plans = len(questions)
     stems = sorted(questions)
     if args.exclude:
         left_out = set(args.exclude.read_text().split())
@@ -106,7 +119,7 @@ def main() -> None:
             if analysis is not None and query is not None:
                 answer = answer_query(query, analysis.rows())
                 value = answer.value
-                complete = value is not None and not analysis.missing_numbers_matter(query.kind)
+                complete = value is not None and not analysis.may_be_incomplete(query.kind)
                 used = [r.number for r in answer.rooms]
             kind = query.kind if query else "unparsed"
             correct = within(value, question["answer"])
@@ -117,6 +130,7 @@ def main() -> None:
                 c["correct"] += correct
                 c["confident"] += complete
                 c["confident_correct"] += complete and correct
+                c["baseline"] += baseline.get((stem, question["question"]), False)
             if not correct:
                 causes[cause(analysis, truth, query, used, value)] += 1
             rows.append({"stem": stem, "question": question["question"], "expected": question["answer"],
@@ -128,7 +142,8 @@ def main() -> None:
     for key in sorted(counts, key=lambda k: (len(k), k)):
         c = counts[key]
         sure = f"{c['confident_correct'] / c['confident']:.1%}" if c["confident"] else "-"
-        print(f"{' / '.join(key):28s} {c['n']:6d} {c['correct'] / c['n']:8.1%} {c['confident'] / c['n']:10.1%} {sure:>24s}")
+        other = f"   run file: {c['baseline']}/{c['n']}, pipeline: {c['correct']}/{c['n']}" if baseline else ""
+        print(f"{' / '.join(key):28s} {c['n']:6d} {c['correct'] / c['n']:8.1%} {c['confident'] / c['n']:10.1%} {sure:>24s}{other}")
     print("causes of wrong answers:")
     for name, n in causes.most_common():
         print(f"  {name:40s} {n}")

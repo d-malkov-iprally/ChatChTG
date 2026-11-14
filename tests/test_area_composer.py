@@ -80,13 +80,25 @@ def test_a_room_that_was_not_found_falls_back_to_the_image_with_the_room_table(l
     assert "1.02 Zimmer: 12.50 m² (measured)" in context.parts[1].text
 
 
-def test_a_total_falls_back_when_the_numbering_has_a_gap(library, plan):
-    plan(analysis([room("1.01", "Zimmer", 10.0), room("1.03", "Zimmer", 12.0)], missing=["1.02"]))
+def test_a_total_with_a_gap_in_the_numbering_falls_back_on_a_plan_that_prints_areas(library, plan):
+    rooms = [room("1.01", "Zimmer", 10.0, method="printed"), room("1.03", "Zimmer", 12.0, method="printed")]
+    for r in rooms:
+        r.printed_area = r.area
+    plan(analysis(rooms, missing=["1.02"]))
 
     context = compose(library, "What is the total net floor area of all rooms labelled 'Zimmer' on this floor in m²?")
 
     assert isinstance(context.parts[0], ImagePart)
     assert "did not find: 1.02" in context.parts[1].text
+
+
+def test_a_total_with_a_gap_in_the_numbering_is_still_answered_on_a_plan_without_printed_areas(library, plan):
+    plan(analysis([room("1.01", "Zimmer", 10.0), room("1.03", "Zimmer", 12.0)], missing=["1.02"]))
+
+    context = compose(library, "What is the total net floor area of all rooms labelled 'Zimmer' on this floor in m²?")
+
+    assert context.system == AREA_SYSTEM_PROMPT
+    assert "Result: 22.00 m²" in context.parts[0].text
 
 
 def test_a_single_room_is_answered_even_when_another_room_is_missing(library, plan):
