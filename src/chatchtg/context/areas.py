@@ -6,13 +6,18 @@ result as text and states the answer; it does not get the image, which is 98% of
 input tokens of the baseline. When the pipeline cannot answer (a room is missing, the
 question is not one it understands), the LLM gets the image as in the baseline, with the
 room table as extra evidence.
+
+When the pipeline's result is the answer, the context also carries the rooms that were
+added up (``method``, ``evidence``), so that the app can draw them on the drawing. The LLM
+does not get them.
 """
 
 from __future__ import annotations
 
 import logging
+from typing import Any
 
-from chatchtg.areas.pipeline import PlanAnalysis, analyse_bytes
+from chatchtg.areas.pipeline import PlanAnalysis, PlanRoom, analyse_bytes
 from chatchtg.areas.questions import AreaAnswer, parse_question, answer_query
 from chatchtg.context.baseline import SYSTEM_PROMPT, BaselineComposer
 from chatchtg.context.composer import ComposerInput
@@ -73,6 +78,65 @@ def table_text(analysis: PlanAnalysis) -> str:
     return "\n".join(lines)
 
 
+def area_method(counted: list[PlanRoom]) -> str:
+    """The method of an area answer: ``printed``, ``measured`` or ``printed+measured``."""
+    methods = {room.method for room in counted if room.area is not None}
+    return "+".join(method for method in ("printed", "measured") if method in methods)
+
+
+def _place(room: PlanRoom) -> dict[str, Any]:
+    """The outline of a room, or the place of its label when no outline was found."""
+    if room.polygon:
+        return {"polygon": [[round(x), round(y)] for x, y in room.polygon]}
+    return {"point": [round(room.seed[0]), round(room.seed[1])]}
+
+
+def area_evidence(analysis: PlanAnalysis, counted: list[PlanRoom], answer: AreaAnswer) -> list[dict[str, Any]]:
+    """The rooms that were added up, as evidence items (see ``chatchtg.evidence``).
+
+    One item for each room, one item for rooms that were measured as one region, and the
+    total last. Coordinates are whole pixels of the image.
+    """
+    items: list[dict[str, Any]] = []
+    regions_done: set[str] = set()
+    for room in counted:
+        if room.region is None:
+            items.append(
+                {
+                    "text": room.number,
+                    "detail": room.name or "no name",
+                    "kind": room.method,
+                    "value": round(room.area, 2),
+                    "unit": "m²",
+                    **_place(room),
+                }
+            )
+            continue
+        if room.region in regions_done:
+            continue
+        regions_done.add(room.region)
+        members = [member for member in counted if member.region == room.region]
+        # The room that carries the area and the outline of the whole region.
+        carrier = next(
+            (r for r in [*members, *analysis.rooms] if r.number == room.region and r.area is not None), room
+        )
+        items.append(
+            {
+                "text": "+".join(member.number for member in members),
+                "detail": ", ".join(member.name or "no name" for member in members)
+                + ": measured as one region, no wall was found between them",
+                "kind": "shared",
+                "value": round(carrier.area, 2) if carrier.area is not None else None,
+                "unit": "m²",
+                **_place(carrier),
+            }
+        )
+    items.append(
+        {"text": "Total", "detail": answer.note, "kind": "total", "value": round(answer.value, 2), "unit": "m²"}
+    )
+    return items
+
+
 class AreaComposer:
     name = "areas"
     version = 2
@@ -90,7 +154,8 @@ class AreaComposer:
             # Logged, because a fault in the pipeline would otherwise look like a baseline run.
             logger.warning("The area pipeline failed on %s", request.document.filename, exc_info=True)
             return self._baseline.compose(request)
-        answer = answer_query(query, analysis.rows())
+        rows = analysis.rows()
+        answer = answer_query(query, rows)
         # A total may lack a room whose label was not read. On a plan that prints its areas
         # the LLM reads the labels reliably, so it gets the image then. On a plan without
         # printed areas it would have to estimate, and the tool's total is the better answer
@@ -102,9 +167,15 @@ class AreaComposer:
             methods = {room.number: room.method for room in analysis.rooms}
             doubtful = doubtful or any(methods.get(room.number) != "printed" for room in answer.rooms)
         if answer.value is not None and not doubtful:
+            # The rows are in the order of the rooms. Matched by identity: a number can be read twice.
+            counted = [
+                room for room, row in zip(analysis.rooms, rows) if any(row is r for r in answer.rooms)
+            ]
             return Context(
                 system=AREA_SYSTEM_PROMPT,
                 parts=[TextPart(text=result_text(analysis, answer)), TextPart(text=request.message)],
+                method=area_method(counted),
+                evidence=area_evidence(analysis, counted, answer),
             )
         return Context(
             system=SYSTEM_PROMPT,

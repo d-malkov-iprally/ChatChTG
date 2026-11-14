@@ -9,7 +9,7 @@ from chatchtg.documents.library import DocumentNotFoundError
 from chatchtg.llm.client import build_llm
 from chatchtg.llm.fake import FakeLLM
 from chatchtg.schemas import AnswerRequest
-from conftest import PNG
+from conftest import PNG, EvidenceComposer
 
 
 def test_baseline_composer_needs_no_storage_or_llm(library):
@@ -72,3 +72,21 @@ def test_unknown_composer_and_provider_are_rejected():
         get_composer("nope")
     with pytest.raises(ValueError, match="Unknown LLM provider"):
         build_llm("nope")
+
+
+def test_evidence_of_the_composer_reaches_the_response(library):
+    document = library.add_upload(PNG, "plan.png")
+    service = AnswerService(library, EvidenceComposer(), FakeLLM(reply="8.00 m²"))
+
+    response = service.answer(AnswerRequest(document_id=document.id, message="Area of room 1.01?"))
+
+    assert response.method == "printed"
+    assert response.evidence[0]["point"] == [4, 5]
+
+
+def test_a_plain_llm_answer_has_no_method_and_no_evidence(library, service):
+    document = library.add_upload(PNG, "plan.png")
+
+    response = service.answer(AnswerRequest(document_id=document.id, message="How many doors?"))
+
+    assert response.method is None and response.evidence == []

@@ -177,3 +177,59 @@ def test_only_the_first_room_of_a_shared_region_keeps_the_measured_area():
 
     # The first room prints its own area, so the region's area cannot stand for both.
     assert [(r.area, r.method, r.region) for r in rooms] == [(15.0, "printed", None), (None, None, None)]
+
+
+QUESTION_A = "What is the net floor area of apartment A in m²?"
+
+
+def test_an_answered_area_question_carries_the_rooms_as_evidence(library, plan):
+    kitchen, bedroom = room("1.01", "Küche", 8.127), room("1.02", "Zimmer", 12.5, method="printed")
+    kitchen.polygon = [(10.4, 10.6), (90.0, 10.0), (90.0, 60.0), (10.0, 60.0)]
+    bedroom.polygon = [(100.0, 10.0), (180.0, 10.0), (180.0, 60.0)]
+    plan(analysis([kitchen, bedroom, room("1.03", "Balkon", 4.0, outdoor=True)]))
+
+    context = compose(library, QUESTION_A)
+
+    assert context.method == "printed+measured"
+    assert context.evidence == [
+        {"text": "1.01", "detail": "Küche", "kind": "measured", "value": 8.13, "unit": "m²",
+         "polygon": [[10, 11], [90, 10], [90, 60], [10, 60]]},
+        {"text": "1.02", "detail": "Zimmer", "kind": "printed", "value": 12.5, "unit": "m²",
+         "polygon": [[100, 10], [180, 10], [180, 60]]},
+        {"text": "Total", "detail": "Sum of the 2 indoor rooms of apartment A: 1.01, 1.02.",
+         "kind": "total", "value": 20.63, "unit": "m²"},
+    ]
+
+
+def test_rooms_measured_as_one_region_are_one_evidence_item(library, plan):
+    hall, corridor = room("1.01", "Zimmer", 15.0), room("1.02", "Korridor", None)
+    hall.region = corridor.region = "1.01"
+    hall.polygon = [(0.0, 0.0), (50.0, 0.0), (50.0, 30.0), (0.0, 30.0)]
+    corridor.polygon = [(20.0, 0.0), (50.0, 0.0), (50.0, 30.0)]
+    plan(analysis([hall, corridor, room("1.03", "Bad", 5.0)]))
+
+    shared, bath, total = compose(library, QUESTION_A).evidence
+
+    assert shared == {
+        "text": "1.01+1.02", "detail": "Zimmer, Korridor: measured as one region, no wall was found between them",
+        "kind": "shared", "value": 15.0, "unit": "m²", "polygon": [[0, 0], [50, 0], [50, 30], [0, 30]],
+    }
+    assert bath["text"] == "1.03" and total["value"] == 20.0
+
+
+def test_a_room_without_an_outline_is_marked_at_its_label(library, plan):
+    kitchen = room("1.01", "Küche", 8.0, method="printed")
+    kitchen.seed = (40.6, 20.2)
+    plan(analysis([kitchen]))
+
+    item = compose(library, "What is the net floor area of room 1.01 ('Küche') in m²?").evidence[0]
+
+    assert item["point"] == [41, 20] and "polygon" not in item
+
+
+def test_a_question_the_pipeline_cannot_answer_carries_no_evidence(library, plan):
+    plan(analysis([room("1.02", "Zimmer", 12.5)]))
+
+    context = compose(library, "What is the net floor area of room 1.01 ('Küche') in m²?")
+
+    assert context.method is None and context.evidence == []

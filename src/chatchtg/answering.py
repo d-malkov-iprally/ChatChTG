@@ -74,8 +74,10 @@ class AnswerService:
             text=completion.text,
             composer=composer_id(self._composer),
             model=completion.model,
-            method=finding.method if finding else None,
-            evidence=finding.evidence if finding else [],
+            # The evidence of one producer: the room counter when its count is the answer,
+            # otherwise what the composer knows about a result that the context states.
+            method=finding.method if finding else context.method,
+            evidence=finding.evidence if finding else context.evidence,
         )
         return AnswerTrace(response=response, context=context, completion=completion)
 

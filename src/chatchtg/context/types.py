@@ -1,11 +1,15 @@
-"""The context: everything the LLM is given, in a provider-neutral form."""
+"""The context: everything the LLM is given, in a provider-neutral form.
+
+It also carries what the composer knows about the origin of a code-made answer
+(``method``, ``evidence``). The LLM adapters do not read those two fields.
+"""
 
 from __future__ import annotations
 
 import hashlib
 from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class TextPart(BaseModel):
@@ -22,6 +26,10 @@ class ImagePart(BaseModel):
 class Context(BaseModel):
     system: str
     parts: list[TextPart | ImagePart]
+    method: str | None = None
+    """How code made the answer that this context states. Not sent to the LLM."""
+    evidence: list[dict[str, Any]] = Field(default_factory=list)
+    """Where that answer comes from on the drawing (see chatchtg.evidence). Not sent to the LLM."""
 
     def summary(self) -> dict[str, Any]:
         """A JSON-safe description for logs and eval results. Images become their hash."""
