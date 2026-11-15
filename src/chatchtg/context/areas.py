@@ -238,7 +238,7 @@ def area_evidence(analysis: PlanAnalysis, counted: list[PlanRoom], answer: AreaA
 
 class AreaComposer:
     name = "areas"
-    version = 3
+    version = 4
 
     def __init__(self) -> None:
         self._baseline = BaselineComposer()
