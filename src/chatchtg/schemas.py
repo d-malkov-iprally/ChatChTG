@@ -21,6 +21,8 @@ class AnswerResponse(BaseModel):
     model: str
     """Model name reported by the LLM client."""
     method: str | None = None
-    """How a room count was made when code made it, not the LLM: ``labels``, ``shapes``, ``usual``."""
+    """How a count was made when code made it, not the LLM: ``labels``, ``shapes``, ``usual``
+    (rooms), ``detector`` (objects)."""
     evidence: list[dict[str, Any]] = Field(default_factory=list)
-    """What the code counted: ``{"text", "box"}``, the box in image pixels (x0, y0, x1, y1)."""
+    """What the code counted: ``{"text", "box"}``, the box in image pixels (x0, y0, x1, y1).
+    An object also has ``ref``, the reference of the detection in the extraction store."""
