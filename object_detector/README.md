@@ -56,6 +56,24 @@ Download the checkpoint of a run:
 uv run --group train modal volume get chatchtg-object-detector runs/large-1024/checkpoint_best_total.pth var/models/
 ```
 
+## First run
+
+`large-1024` on 2026-11-15: RF-DETR Large at 1024 px, 40 epochs, 118 minutes on an L40S. Best validation mAP 0.481 (0.706 at IoU 0.5), at epoch 38. Counts on the 400 test plans, with the minimum score 0.45 that was selected on the validation plans:
+
+| Class | Plans with the exact count | Mean error of the count |
+|---|---|---|
+| window | 48.5% | 1.46 |
+| door | 63.2% | 0.69 |
+| toilet | 81.2% | 0.25 |
+| sink | 76.5% | 0.30 |
+| bathtub | 94.5% | 0.06 |
+| shower | 65.2% | 0.47 |
+| sauna bench | 75.0% | 0.46 |
+
+Against the benchmark answers on the same plans: windows 47.5%, doors 71.2%, toilet bowls 81.3%, sinks 76.4%, showers and bathtubs 66.0%.
+
+Window counts are too high as often as too low. Shower counts are almost always too low. The largest errors are on plans with many objects: one plan has 61 labelled windows and 21 found.
+
 ## The dataset
 
 - The split is the split of CubiCasa5K: 4,200 plans to train, 400 to validate, 400 to test. The 2019 model of CubiCasa5K has the same test plans.
