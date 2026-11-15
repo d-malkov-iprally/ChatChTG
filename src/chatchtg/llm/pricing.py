@@ -6,6 +6,7 @@ from collections.abc import Mapping
 
 # US dollars per million tokens: (input, output). Anthropic list prices of 2026-11-03,
 # for prompts up to 100K tokens. The models that the API can fall back to are listed too.
+# The last entry is the price of a Modal Shared Endpoint on 2026-11-15.
 PRICES: dict[str, tuple[float, float]] = {
     "fake": (0.0, 0.0),
     "fake-judge": (0.0, 0.0),
@@ -18,6 +19,7 @@ PRICES: dict[str, tuple[float, float]] = {
     "claude-sonnet-5-5": (2.0, 10.0),
     "claude-sonnet-5": (2.0, 10.0),
     "claude-haiku-5-5": (0.10, 0.50),
+    "moonshotai/Kimi-K3.1-Pro": (2.0, 10.0),
 }
 
 _INPUT_FIELDS = ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")
