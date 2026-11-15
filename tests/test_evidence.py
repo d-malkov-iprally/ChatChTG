@@ -106,9 +106,17 @@ def test_format_value_and_the_colour_key():
     assert format_value({}) == ""
     key = colour_key([
         {"text": "a", "kind": "printed", "point": [1, 1]}, {"text": "b", "kind": "printed", "point": [2, 2]},
-        {"text": "c", "kind": "llm", "point": [3, 3]}, {"text": "Total", "kind": "total"},
+        {"text": "c", "kind": "new", "point": [3, 3]}, {"text": "Total", "kind": "total"},
     ])
-    assert key == [("blue", "area printed on the drawing"), ("green", "llm")]
+    assert key == [("blue", "area printed on the drawing"), ("gray", "new")]
+
+
+def test_marks_of_the_llm_have_their_own_words_and_colour():
+    assert describe_method("llm-located").startswith("counted by the LLM")
+    item = {"text": "door 1", "kind": "llm", "point": [5, 5]}
+    assert colour_key([item]) == [("green", "marked by the LLM as counted; code did not check the position")]
+    image = render_evidence(png(), [item])
+    assert image.size == (400, 300) and image.getextrema() != ((255, 255), (255, 255), (255, 255))
 
 
 def test_method_words():

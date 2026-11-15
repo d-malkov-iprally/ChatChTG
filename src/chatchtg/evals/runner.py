@@ -93,9 +93,10 @@ def run_eval(
     gets ``judge_*`` fields and the counts get ``judged``, ``judge_correct`` and ``disagree``.
     ``correct`` stays the result of the rule.
 
-    With ``evidence``, each row also gets ``method`` (how code made the answer, or null) and
+    With ``evidence``, each row also gets ``method`` (how the answer was made, or null),
     ``evidence`` (the items that the app draws on the drawing, see ``chatchtg.evidence``; an
-    empty list when there are none). Without it neither key is written: the rows of an area
+    empty list when there are none) and ``evidence_note`` (what a check of the evidence found,
+    or null). Without it none of the three is written: the rows of an area
     answer would be 1 to 3 KB larger each. A resumed run keeps the earlier rows as they are.
     """
     questions: Iterator[dict[str, Any]] | list[dict[str, Any]]
@@ -161,7 +162,11 @@ def run_eval(
                 "cost_usd": cost,
             }
             if evidence:
-                row |= {"method": trace.response.method, "evidence": trace.response.evidence}
+                row |= {
+                    "method": trace.response.method,
+                    "evidence": trace.response.evidence,
+                    "evidence_note": trace.response.evidence_note,
+                }
             costs = [(trace.completion.model, cost)]
             judge_correct = None
             if judge is not None and correct is not None:

@@ -17,7 +17,9 @@ Key         Type                                 Meaning
 ``point``   ``[x, y]``                           A place without an extent.
 ``kind``    string, optional                     Legend group, it selects the colour. Known:
                                                  ``printed``, ``measured``, ``shared``,
-                                                 ``total``. Absent: counted on the drawing.
+                                                 ``total``, ``llm`` (a position that the LLM
+                                                 gave; code did not check it against the
+                                                 drawing). Absent: counted on the drawing.
                                                  An unknown kind gets the fallback colour
                                                  and is named by its own string.
 ``value``   number, optional                     The number the item contributes (an area).
@@ -38,8 +40,11 @@ Rules:
 - ``AnswerResponse.method`` is a short code; its words are in ``METHOD_WORDS``. A producer
   that adds a method adds its words there.
 - One response carries the evidence of one producer.
-- Eval result rows have ``method`` and ``evidence`` only with ``chatchtg eval --evidence``.
-  Every other row key that describes evidence is written under the same option.
+- Eval result rows have ``method``, ``evidence`` and ``evidence_note`` only with
+  ``chatchtg eval --evidence``. Every other row key that describes evidence is written under
+  the same option.
+- ``AnswerResponse.evidence_note`` is not an item: it is a warning about the whole answer
+  (see chatchtg.evidence_check).
 
 The module needs Pillow only, so the app, the eval tools and the tests can all use it.
 """
@@ -64,6 +69,10 @@ METHOD_WORDS = {
     "printed+measured": (
         "added up in code: printed areas where the drawing has them, measured outlines for the other rooms"
     ),
+    "llm-located": (
+        "counted by the LLM, which marked each item it counted; "
+        "code did not check the marks against the drawing"
+    ),
 }
 NO_METHOD_WORDS = "answered by the LLM; code did not locate the answer on the drawing"
 
@@ -73,8 +82,9 @@ KINDS: dict[str | None, tuple[str, str, tuple[int, int, int]]] = {
     "printed": ("area printed on the drawing", "blue", (31, 119, 180)),
     "measured": ("area measured by code from the room outline", "orange", (245, 130, 49)),
     "shared": ("rooms measured as one region: no wall was found between them", "violet", (145, 30, 180)),
+    "llm": ("marked by the LLM as counted; code did not check the position", "green", (44, 160, 44)),
 }
-FALLBACK_COLOUR = ("green", (44, 160, 44))  # an unknown kind; its words are the kind itself
+FALLBACK_COLOUR = ("gray", (110, 110, 110))  # an unknown kind; its words are the kind itself
 FILL_ALPHA = 40  # of 255: the printed labels stay readable under the fill
 
 # The line and the tag grow with the image, because the app shows large drawings scaled down.
