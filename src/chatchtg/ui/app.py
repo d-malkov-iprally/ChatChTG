@@ -66,9 +66,6 @@ def inject_styles() -> None:
         .brand-compass { width: 1.55rem; height: 1.55rem; color: #c7afff; filter: drop-shadow(0 2px 5px rgba(161, 122, 234, 0.32)); }
         .brand-compass path, .brand-compass circle { vector-effect: non-scaling-stroke; }
         .brand-name { font-size: 1.14rem; font-weight: 740; letter-spacing: -0.02em; }
-        .primary-nav { display: flex; gap: 0.36rem; height: 100%; align-items: center; }
-        .primary-nav span { color: #c5cad9; padding: 0.55rem 1rem; border-radius: 0.35rem; font-size: 0.94rem; }
-        .primary-nav .active { color: #fff; background: linear-gradient(135deg, #62558f, #413d65); box-shadow: inset 0 0 0 1px rgba(222, 210, 255, 0.15); }
         div[data-testid="stSegmentedControl"] { margin: 0.05rem 0 0.6rem; }
         div[data-testid="stSegmentedControl"] label {
             color: #edf1fa !important; background: rgba(15, 21, 33, 0.78) !important;
@@ -140,8 +137,6 @@ def inject_styles() -> None:
         @media (max-width: 900px) {
             [data-testid="stMainBlockContainer"] { padding: 0.4rem 0.55rem 0.7rem; }
             .top-chrome { margin-left: -0.55rem; margin-right: -0.55rem; padding: 0 0.7rem; }
-            .primary-nav { display: none; }
-            .window-actions { display: none; }
             .st-key-drawing_canvas [data-testid="stImage"] img { max-height: none; }
         }
         </style>
@@ -160,7 +155,6 @@ def render_header() -> None:
             </svg>
             <span class="brand-name">ChatChTG</span>
           </div>
-          <div class="primary-nav"><span class="active">Analyze</span></div>
         </div>
         """,
         unsafe_allow_html=True,
