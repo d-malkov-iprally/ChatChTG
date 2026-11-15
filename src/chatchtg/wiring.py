@@ -13,10 +13,12 @@ from chatchtg.documents.metadata import SqliteMetadataStore
 from chatchtg.evals.judge import DEFAULT_JUDGE_MODEL, ClaudeJudge, FakeJudge, Judge
 from chatchtg.extractions.store import LocalExtractionStore
 from chatchtg.llm.client import build_llm
+from chatchtg.objects.counter import DetectorObjectCounter
 from chatchtg.rooms import ocr
 from chatchtg.rooms.counter import LabelRoomCounter
 
 ROOM_COUNTER_MODES = ("off", "confident", "always")
+OBJECT_COUNTER_MODES = ("off", "detections")
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +42,14 @@ def build_answer_service(
             f"Unknown room counter mode {settings.room_counter!r}. "
             f"Available: {', '.join(ROOM_COUNTER_MODES)}"
         )
+    if settings.object_counter not in OBJECT_COUNTER_MODES:
+        raise ValueError(
+            f"Unknown object counter mode {settings.object_counter!r}. "
+            f"Available: {', '.join(OBJECT_COUNTER_MODES)}"
+        )
+    object_counter = None
+    if settings.object_counter == "detections":
+        object_counter = DetectorObjectCounter(build_extraction_store(settings))
     room_counter = None
     if settings.room_counter != "off":
         if not ocr.available():
@@ -59,6 +69,7 @@ def build_answer_service(
         llm=build_llm(settings.llm_provider, settings.llm_model, api_key, settings.modal_endpoint),
         room_counter=room_counter,
         trust_room_counter=settings.room_counter == "always",
+        object_counter=object_counter,
     )
 
 

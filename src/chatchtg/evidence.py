@@ -64,6 +64,7 @@ METHOD_WORDS = {
     "shapes": "counted from the shapes on the drawing",
     "labels+shapes": "counted from the printed labels and confirmed by the shapes",
     "usual": "not counted on the drawing: this is the usual number for such a plan",
+    "detector": "counted in code from the symbols that a detector found on the drawing",
     "printed": "added up in code from the areas printed on the drawing",
     "measured": "added up in code from room outlines that code measured on the drawing",
     "printed+measured": (
