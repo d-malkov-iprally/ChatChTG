@@ -50,7 +50,11 @@ if document is not None:
     image_column, chat_column = st.columns(2)
 
     with image_column:
-        st.image(library.read(document.id), caption=document.filename)
+        try:
+            st.image(library.read(document.id), caption=document.filename)
+        except Exception as error:  # the file is gone, was replaced, or is not a real image
+            st.error(f"This drawing cannot be shown: {error}")
+            st.stop()
         with st.expander("Document record"):
             st.json(document.model_dump(mode="json", exclude={"attributes"}))
         with st.form("attributes"):

@@ -6,16 +6,37 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "anthropic>=2.8.0",
+    "certifi>=2026.10.23",
+    "numpy>=2.5.4",
+    "opencv-python-headless>=5.0.0.93",
+    "pillow>=13.0.0",
     "pydantic>=2.7",
+    "pyobjc-framework-vision>=13.0 ; sys_platform == 'darwin'",
     "python-dotenv>=1.2.4",
+    "rapidocr-onnxruntime>=1.4.4",
+    "scipy>=1.18.1",
     "streamlit>=1.40",
 ]
 
 [project.scripts]
 chatchtg = "chatchtg.cli:main"
 
+[project.optional-dependencies]
+detect = [
+    "scikit-image>=0.26.0",
+    "scipy>=1.18.1",
+    "shapely>=2.2.0",
+    "torch>=2.15.0",
+    "torchvision>=0.29.2",
+    "transformers>=5.23.0",
+]
+
 [dependency-groups]
-dev = ["pytest>=8"]
+dev = [
+    "ezdxf>=1.4.5",
+    "pytest>=8",
+    "shapely>=2.2.0",
+]
 # For the training commands of object_detector/. Use it with `uv run --group train modal ...`.
 train = ["modal>=1.1"]
 

@@ -3,6 +3,8 @@ Junction demo of drawing conversational platform
 
 The challenge this answers is recorded in [docs/challenge.md](docs/challenge.md).
 
+New to the project? Read [ONBOARDING.md](ONBOARDING.md) for the rules and conventions.
+
 ## Quick start
 
 You need [uv](https://docs.astral.sh/uv/). It installs the Python version given in `.python-version`.
@@ -45,6 +47,28 @@ uv run chatchtg eval data/floorplans --questions questions-subset.jsonl --sample
 uv run pytest
 ```
 
+### Detection demo
+
+A separate Streamlit page to try open-vocabulary detectors on a drawing: select an image, name the objects to find ("window, door"), and see the boxes and the count of each label.
+
+```sh
+uv sync --extra detect                       # torch, transformers and the image libraries, about 0.8 GB
+uv run --extra detect chatchtg detect-demo   # start the demo at http://localhost:8501
+```
+
+- The image is an upload, or a PNG/JPEG file of the data folder `CHATCHTG_DATA_ROOT` (`data`) or of one of its subfolders. The page does not read files outside the data folder.
+- The demo is served to this machine only (`127.0.0.1`).
+- The models are Grounding DINO tiny and base, MM Grounding DINO base, OWLv2 base and large, and SAM 3. They run on this machine: on a CUDA GPU, on Apple MPS, or on the CPU.
+- The SAM 3 weights are gated. To use SAM 3, request access at https://huggingface.co/facebook/sam3 with your Hugging Face account, wait for the approval, then run `uv run --extra detect hf auth login`. Without access, the demo shows these steps and the other models still work.
+- CubiCasa5K is the floor-plan model of https://github.com/CubiCasa/CubiCasa5k. It is not open-vocabulary: it finds windows, doors, closets, electrical appliances, toilets, sinks, sauna benches, fire places, bathtubs and chimneys, and the rooms kitchen, living room, bed room, bath, entry, storage, garage and outdoor. The prompt selects which of these are shown. It has no class for showers.
+  - It was trained on the CubiCasa5K floor plans. Most `cubicasa5k` images of the benchmark are images that it was trained on, so its results there are better than on other plans. Use `swiss_dwellings` to see how well it works on plans that it has not seen.
+  - The first use downloads its weights (209 MB) from the Google Drive link of that project into `var/models`. The file is checked against a SHA-256 value.
+  - Its code is in `src/chatchtg/detection/cubicasa`. Code and weights are CC BY-NC 4.0 (non-commercial), see the `LICENSE` file of that folder.
+- SAM 3.1 is not included. It changes the video tracker of SAM 3, and its weights do not load with `transformers`.
+- The first use of a model downloads its weights from the Hugging Face hub. That can take some minutes.
+- "Minimum score" removes detections below that score. Scores of different models are not comparable: OWLv2 gives much lower scores than Grounding DINO, so its default is 0.10 and not 0.25.
+- The demo does not use the document library or the LLM, and it stores nothing.
+
 ### Floor-plan benchmark
 
 Scores are compared on the floor-plan benchmark ([ADR 0003](docs/ADR/0003-floor-plans-only.md)). Build it once from the full dataset:
@@ -57,6 +81,34 @@ uv run chatchtg eval data/floorplans                   # all 123,098 questions
 ```
 
 `data/floorplans` holds the PNG floor plans of the `cubicasa5k` and `swiss_dwellings` sources that have questions, their licence files, `questions.jsonl` and `questions-subset.jsonl`. The folder has the layout of a downloaded dataset and contains its own images, so it can be copied to another machine. The subset is balanced over source and question type; the same `--seed` and `--subset-size` always give the same subset. Building again copies only the files that are missing.
+
+### Area questions
+
+The `areas` composer answers area questions on Swiss floor plans from a room table that it builds from the PNG, with no LLM call for the measuring:
+
+```sh
+CHATCHTG_COMPOSER=areas uv run chatchtg serve
+uv run chatchtg eval data/floorplans --questions questions-subset.jsonl --composer areas
+```
+
+- **Labels** (`areas/labels.py`): local OCR reads the scale, the room numbers, names, printed areas and apartment tags.
+- **Membership** (`areas/membership.py`): a grey floor marks an outdoor room; the red outlines assign rooms to apartments.
+- **Areas** (`areas/measure.py`): a printed area is used where there is one. Otherwise the room is measured: its outline is found from the drawn lines and each edge is placed at the centre of its line, to a fraction of a pixel.
+- **Answer** (`areas/questions.py`): the question is parsed (English, German, French, Italian) and the areas are added up in code.
+
+The LLM gets the result as text, without the image, and states it. It gets the image and the room table when the pipeline cannot answer. Other questions are composed as in the baseline. The first question on a drawing takes several seconds of CPU for the OCR; later questions on the same drawing reuse the analysis.
+
+To score the pipeline without any LLM call:
+
+```sh
+uv sync --dev                                   # ezdxf and shapely, for the ground truth
+uv run python scripts/build_room_truth.py       # room areas from the DXF twins, into var/room-truth
+uv run python scripts/eval_areas.py --plans 100 # answers the area questions of 100 plans in code
+uv run python scripts/eval_labels.py 20 20      # the label reader alone
+uv run python scripts/eval_membership.py        # the aggregation rules and apartment membership alone
+```
+
+The DXF files are used only to score and to explain errors, never to answer ([ADR 0003](docs/ADR/0003-floor-plans-only.md)). Results are in [docs/benchmarks](docs/benchmarks/).
 
 ### Judge
 
@@ -81,7 +133,23 @@ CHATCHTG_LLM_PROVIDER=claude uv run chatchtg serve
 CHATCHTG_LLM_PROVIDER=claude CHATCHTG_LLM_MODEL=claude-haiku-5-5 uv run chatchtg eval data/preview --limit 50
 ```
 
-`--sample N` answers N questions, balanced over source and question type; `--seed` changes the pick. `--max-cost` stops the run before its cost passes that many US dollars. Each result line records the token usage and the cost of its answer. If a run is interrupted, run the same command again with the same `--out` file and `--resume`: it keeps the answers and asks only the remaining questions.
+To use an open-weights model on [Modal](https://modal.com) instead, create a Shared Endpoint and a proxy token in your Modal workspace. Both commands need the Modal CLI, and the endpoint is billed per token to that workspace:
+
+```sh
+modal endpoint create --shared --model moonshotai/Kimi-K3.1-Pro
+modal workspace proxy-tokens create
+```
+
+Put the endpoint's hostname (the Modal dashboard shows it, for example `my-endpoint.us-west.modal.direct`) in `CHATCHTG_MODAL_ENDPOINT`, and the token in `CHATCHTG_MODAL_PROXY_TOKEN` as `wk-<id>.ws-<secret>`. Then:
+
+```sh
+CHATCHTG_LLM_PROVIDER=modal uv run chatchtg serve
+CHATCHTG_LLM_PROVIDER=modal uv run chatchtg eval data/preview --sample 20 --max-cost 2
+```
+
+The results and the cost assume that the endpoint serves Kimi K3.1 Pro. For an endpoint with another model, set `CHATCHTG_LLM_MODEL` to that model's name and add its price to `llm/pricing.py`. `eval --judge` still uses the Claude judge, so it also needs an Anthropic key.
+
+`--sample N` answers N questions, balanced over source and question type; `--seed` changes the pick. `--max-cost` stops the run before its cost passes that many US dollars. Each result line records the token usage and the cost of its answer. If a run is interrupted, run the same command again with the same `--out` file and `--resume`: it keeps the answers and asks only the remaining questions. `--resume` needs `--out`. A question whose drawing is missing or not readable is skipped, and the run prints how many it skipped.
 
 Claude needs an Anthropic key, and each request is billed to that key's account. Keep the key in this project:
 
@@ -93,7 +161,7 @@ Every `CHATCHTG_*` variable can be set in `.env`. The file is read from the fold
 
 If `CHATCHTG_ANTHROPIC_API_KEY` is not set, the Anthropic SDK looks for credentials itself: `ANTHROPIC_API_KEY`, or a login made with `ant auth login`.
 
-State (uploaded files, `chatchtg.db`, eval results) is written to `var/`.
+State (uploaded files, `chatchtg.db`, extractions, eval results) is written to `var/`.
 
 Set these in the shell or in `.env`:
 
@@ -101,11 +169,35 @@ Set these in the shell or in `.env`:
 |---|---|---|
 | `CHATCHTG_DATA_ROOT` | `data` | root of the downloaded datasets |
 | `CHATCHTG_STATE_DIR` | `var` | where state is written |
-| `CHATCHTG_COMPOSER` | `baseline` | context composer used by the app |
-| `CHATCHTG_LLM_PROVIDER` | `fake` | LLM adapter: `fake` or `claude` |
+| `CHATCHTG_COMPOSER` | `baseline` | context composer used by the app: `baseline`, `areas` or `room-conventions` |
+| `CHATCHTG_ROOM_COUNTER` | `off` | `confident`: code answers a room-count question when it is as accurate as the LLM; `always`: code answers every room-count question; see [Room counting](#room-counting) |
+| `CHATCHTG_LLM_PROVIDER` | `fake` | LLM adapter: `fake`, `claude` or `modal` |
 | `CHATCHTG_ANTHROPIC_API_KEY` | not set | this project's Anthropic key, used instead of `ANTHROPIC_API_KEY` |
-| `CHATCHTG_LLM_MODEL` | adapter's default | model the adapter calls; for `claude` the default is `claude-opus-5-5` |
+| `CHATCHTG_MODAL_ENDPOINT` | not set | hostname of the Modal Shared Endpoint that the `modal` adapter calls |
+| `CHATCHTG_MODAL_PROXY_TOKEN` | not set | Modal proxy token for that endpoint, as `wk-<id>.ws-<secret>` |
+| `CHATCHTG_LLM_MODEL` | adapter's default | model the adapter calls; for `claude` the default is `claude-opus-5-5`. For `modal` it is the name of the model that the endpoint serves, used for the results and the price; the default is `moonshotai/Kimi-K3.1-Pro` |
 | `CHATCHTG_JUDGE_MODEL` | `claude-haiku-5-5` | model that reads the answers for `eval --judge` |
+
+## Room counting
+
+Almost half of the benchmark questions count rooms: bedrooms, saunas, kitchens, bathrooms, WC rooms, balconies and storeys on Finnish plans, rooms with a given label and apartments on Swiss plans. Two things exist for them. The measurements are in [docs/benchmarks/2026-11-14-room-counting.md](docs/benchmarks/2026-11-14-room-counting.md).
+
+- **The `room-conventions` composer** adds the counting conventions of Finnish plans to a room-count question, for example that the rooms of a neighbouring home on the sheet do not count. It raised the accuracy of Opus 5.5 on room questions. Every other question gets the baseline context.
+
+  ```sh
+  CHATCHTG_COMPOSER=room-conventions uv run chatchtg serve
+  uv run chatchtg eval data/floorplans --composer room-conventions --questions questions-subset.jsonl
+  ```
+
+- **The room counter** (`rooms/`) answers a room-count question in code: it reads the printed labels with OCR, maps them to the question with a lexicon, and counts apartments and storeys from shapes. It costs nothing per question, but it is less accurate than Opus 5.5 on every kind of question except apartments. So `CHATCHTG_ROOM_COUNTER=confident` uses it only for apartments, when the unit tags and the unit outlines agree; `always` uses it for every room-count question and is for runs without an LLM budget. The response then carries `method` and `evidence` (the counted labels with their boxes).
+
+  The OCR engine is Apple Vision, so the counter works on macOS only. On another system it steps aside and the LLM answers. OCR results are cached in `var/ocr-cache/`.
+
+  ```sh
+  uv run python -m chatchtg.rooms.warm data/floorplans var/ocr-cache          # read every plan once (about an hour)
+  uv run python -m chatchtg.rooms.bench data/floorplans var/ocr-cache var/rooms.jsonl
+  uv run python -m chatchtg.rooms.report data/floorplans var/rooms.jsonl      # accuracy per kind of question
+  ```
 
 ## Architecture
 
@@ -123,10 +215,13 @@ blobs.py   metadata.py
 
 - **Document storage** (`documents/blobs.py`): uploads are copied to `var/blobs/`; dataset files are referenced in place.
 - **Metadata storage** (`documents/metadata.py`): one SQLite record per document, with free-form JSON attributes.
+- **Extraction storage** (`extractions/`): the facts that a producer derived from a drawing (rooms, objects, their geometry and measures), one JSON file per drawing and producer version in `var/metadata/`. The format is in [docs/metadata-format.md](docs/metadata-format.md). Nothing reads or writes it yet.
+- **Room counter** (`rooms/`): optional. `AnswerService` asks it first; when it is not confident, or the question is not a room count, the LLM answers. See [Room counting](#room-counting).
 - **Context composer** (`context/`): a pure function `(document record, bytes, message) -> Context`. It never calls an LLM. To add a strategy, write a composer and list it in `context/registry.py`.
 - **LLM** (`llm/`): `LLMClient.complete(Context) -> Completion`. To add a provider, write one adapter and add a branch to `build_llm`.
   - `fake` (`llm/fake.py`): a deterministic stand-in for tests and offline runs.
   - `claude` (`llm/claude.py`): sends the system prompt and one user message (the images and text, in order) to the Anthropic Messages API. The completion records the model that served the request and the token usage. If the model declines a request, the API retries it on a fallback model; if that also declines, the answer says so and the run continues.
+  - `modal` (`llm/modal.py`): sends the system prompt and one user message to a Modal Shared Endpoint through its OpenAI-compatible Chat Completions API. The completion records the model that the endpoint is set to serve and the token usage; reasoning tokens count as output tokens. If the model spends its whole output limit on reasoning, the answer says so and the run continues. A failed request is not sent again.
 - **Judge** (`evals/judge.py`): `Judge.read(question, unit, response) -> Judgement`. It is separate from `LLMClient` because it is not the system that the eval measures.
 - **Interface** (`ui/app.py`): holds no logic. The eval runner calls the same `AnswerService`, not the UI.
 - **Schemas** (`schemas.py`): the request and response of an interaction. Add new fields as optional.
