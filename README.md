@@ -134,7 +134,7 @@ uv run python scripts/eval_area_check.py replay --results <a baseline eval run o
 
 The script reads `CHATCHTG_DATA_ROOT` and `CHATCHTG_STATE_DIR` and writes under `<state dir>/area-check/` (`var/area-check/` by default). `signals` keeps the analysis of each plan there: pass `--refresh` after a change to the pipeline. The eval run between `select` and `replay` is an ordinary `chatchtg eval ... --composer baseline` with the absolute path of the question file as `--questions`; with a real provider it is billed.
 
-The DXF files are used only to score and to explain errors, never to answer ([ADR 0003](docs/ADR/0003-floor-plans-only.md)). Results are in [docs/benchmarks](docs/benchmarks/).
+The DXF files are used only to score and to explain errors, never to answer ([ADR 0003](docs/ADR/0003-floor-plans-only.md)). Results are in [docs/benchmarks](docs/benchmarks/). They are also the training labels of the Swiss symbol detector (`object_detector/swiss_dxf.py`), which sees only the PNG; its scores are quoted on test plans that it was not trained on ([result](docs/benchmarks/2026-11-15-swiss-symbol-detector.md)). The app does not use that detector yet.
 
 ### Combined composer
 
