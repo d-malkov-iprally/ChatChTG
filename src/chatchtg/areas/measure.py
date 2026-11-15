@@ -12,6 +12,11 @@ How a room is found:
 4. The outline of the joined region is turned into a polygon. Each polygon edge is moved
    to the centre of the drawn line under it, found to a fraction of a pixel from the
    anti-aliased grey values. The reference areas are measured to that centre.
+
+Two cases need more than that. A fixture whose outline is too wide to join across (the
+double outline of a bathtub at 1:200) is joined to the room it lies in
+(``_enclosed_fixtures``). Where a wall with grey fill lies behind the first line, the edge
+is placed at the outline of the wall, not at a fixture line in front of it (``_wall_centre``).
 """
 
 from __future__ import annotations
@@ -424,8 +429,97 @@ def _stair_flights(labels, stats, graph, scale: float, skip: set[int]) -> list[l
     return flights
 
 
-def _refine(mask: np.ndarray, dark: np.ndarray, origin: tuple[int, int]):
+FIXTURE_AREA = (0.05, 2.5)
+"""Area of a cut-off fixture, in m²."""
+FIXTURE_MIN_SIDE = 0.5
+"""Short side of a cut-off fixture, in metres. A bathtub or a kitchen counter is 0.55 m or
+more deep; the pocket of a door or window opening is as deep as its wall, mostly under 0.4 m."""
+FIXTURE_REACH = 6
+"""Pixels from a fixture to the free space of its room: the double outline of a bathtub
+is a band of ink 4 to 5 px wide at 1:200."""
+FIXTURE_MAX_FILL = 0.5
+"""Share of grey wall fill in the ring 4 px around a component, from which it is taken for
+a shaft or a room of its own. A shaft and a small room have wall on three or four sides.
+The ring around a bathtub lies in the tub's own outline, so it holds little fill."""
+FIXTURE_POCKET_SHARE = 0.8
+"""The pocket of an opening in a thick wall has a room at each end; a fixture that was
+taken for a pocket has at least this share of the free space around it in one room."""
+
+
+def _enclosed_fixtures(
+    labels, stats, fill_region: np.ndarray, owner: dict[int, int], exterior: set[int], neutral: set[int], scale: float
+) -> dict[int, int]:
+    """Unowned free components that lie inside a room: component -> room index.
+
+    The growth loop joins a component only across a thin line. The interior of a bathtub
+    or of a kitchen counter is cut off when its outline is a band of ink wider than that
+    (a double outline at 1:200), when it is taken for an opening pocket, or when a line
+    next to it looks like a boundary. Every room has a label, so a free component without
+    one is a fixture, a shaft, a wall pocket or an opening. It is taken for a fixture when:
+
+    - its area is 0.05 to 2.5 m² and the short side of the smallest rectangle around it,
+      at any angle, is 0.5 m or more;
+    - free space of one or two rooms lies within 6 px of it (it joins the room that has
+      more of that space);
+    - less than half of the ring 4 px around it is grey wall fill;
+    - if it was taken for an opening pocket, one room has 80% of the free space near it.
+
+    On the 20 tuning plans at 1:200 this rule picks 74 components: 72 lie in a room of the
+    DXF truth (3 of them are joined to a neighbour of that room) and 2 do not (3%). They
+    are 59% of the 123 cut-off components of 0.05 m² or more, and 76% of their area. The
+    rest are narrower than 0.5 m and cannot be told from opening pockets by these
+    features. On the 20 tuning plans at 1:100 it picks 5, all in a room.
+
+    Limits. The rule does not look at the line between the component and the room:
+    - A room whose label was not read has no owner either. When it is this small and has
+      thin walls without fill, or separators, around it, it is joined to its neighbour.
+    - A component behind an outline that is classed as wall is joined, but the outline of
+      the room is drawn around the largest connected piece only. The area then stays as
+      it was; if the joined piece is larger than the room, the area becomes that of the piece.
+    """
+    height, width = labels.shape
+    owner_of = np.full(len(stats), -1, np.int64)
+    for component, room in owner.items():
+        owner_of[component] = room
+    found: dict[int, int] = {}
+    low, high = FIXTURE_AREA[0] * scale * scale, FIXTURE_AREA[1] * scale * scale
+    side = FIXTURE_MIN_SIDE * scale
+    pad = FIXTURE_REACH + 2
+    sizes = stats[:, cv2.CC_STAT_AREA]
+    narrow = np.minimum(stats[:, cv2.CC_STAT_WIDTH], stats[:, cv2.CC_STAT_HEIGHT]) + 1
+    for component in np.nonzero((sizes >= low) & (sizes <= high) & (narrow >= side) & (owner_of < 0))[0].tolist():
+        if component == 0 or component in exterior:
+            continue
+        x, y, w, h, area = stats[component]
+        x0, y0 = max(0, x - pad), max(0, y - pad)
+        x1, y1 = min(width, x + w + pad), min(height, y + h + pad)
+        sub = labels[y0:y1, x0:x1]
+        mask = (sub == component).astype(np.uint8)
+        ys, xs = np.nonzero(mask)
+        _, (rw, rh), _ = cv2.minAreaRect(np.stack([xs, ys], axis=1).astype(np.float32))
+        if min(rw, rh) + 1 < side:
+            continue
+        reach = 2 * FIXTURE_REACH + 1
+        near = cv2.dilate(mask, np.ones((reach, reach), np.uint8)).astype(bool)
+        rooms = owner_of[sub[near]]
+        rooms = np.bincount(rooms[rooms >= 0])
+        if not 1 <= np.count_nonzero(rooms) <= 2:
+            continue
+        # the pocket of an opening in a thick wall has a room at each end
+        if component in neutral and rooms.max() < FIXTURE_POCKET_SHARE * rooms.sum():
+            continue
+        grown = cv2.dilate(mask, np.ones((7, 7), np.uint8))
+        ring = (cv2.dilate(grown, K3) - grown).astype(bool)
+        if fill_region[y0:y1, x0:x1][ring].mean() >= FIXTURE_MAX_FILL:
+            continue
+        found[component] = int(rooms.argmax())
+    return found
+
+
+def _refine(mask: np.ndarray, dark: np.ndarray, fill: np.ndarray, origin: tuple[int, int]):
     """Polygons of ``mask`` with each edge moved to the centre of the line under it.
+
+    ``fill`` is 1.0 on the grey fill of a wall and 0.0 elsewhere.
 
     Returns (outer polygon, hole polygons) in image coordinates, or (None, []).
     """
@@ -445,13 +539,13 @@ def _refine(mask: np.ndarray, dark: np.ndarray, origin: tuple[int, int]):
         simple = cv2.approxPolyDP(contour, 1.3, True).reshape(-1, 2).astype(np.float64)
         if len(simple) < 3:
             continue
-        polygons.append((index == outer_index, _refine_polygon(simple, mask, dark, origin)))
+        polygons.append((index == outer_index, _refine_polygon(simple, mask, dark, fill, origin)))
     outer = next((p for is_outer, p in polygons if is_outer), None)
     holes = [p for is_outer, p in polygons if not is_outer]
     return outer, holes
 
 
-def _refine_polygon(points: np.ndarray, mask: np.ndarray, dark: np.ndarray, origin) -> np.ndarray:
+def _refine_polygon(points: np.ndarray, mask: np.ndarray, dark: np.ndarray, fill: np.ndarray, origin) -> np.ndarray:
     ox, oy = origin
     count = len(points)
     start = points
@@ -469,7 +563,8 @@ def _refine_polygon(points: np.ndarray, mask: np.ndarray, dark: np.ndarray, orig
     inside[ok] = mask[probe[ok, 1], probe[ok, 0]] > 0
     normal[inside] *= -1
 
-    steps = np.arange(-2.5, 6.01, 0.25)
+    steps = np.arange(-2.5, WALL_WINDOW + 0.01, 0.25)
+    near = int(np.searchsorted(steps, LINE_WINDOW + 0.01))
     offsets = np.full(count, np.nan)
     sample_edge, sample_point = [], []
     for i in range(count):
@@ -486,7 +581,8 @@ def _refine_polygon(points: np.ndarray, mask: np.ndarray, dark: np.ndarray, orig
         xs = point[:, 0, None] + steps[None, :] * normal[edge, 0, None] + ox
         ys = point[:, 1, None] + steps[None, :] * normal[edge, 1, None] + oy
         profile = ndimage.map_coordinates(dark, [ys, xs], order=1, mode="nearest")
-        centre = _line_centre(profile, steps)
+        behind = ndimage.map_coordinates(fill, [ys, xs], order=1, mode="nearest") >= 0.5
+        centre = _wall_centre(profile, steps, behind, _line_centre(profile[:, :near], steps[:near]))
         for i in np.unique(edge):
             values = centre[edge == i]
             values = values[~np.isnan(values)]
@@ -565,6 +661,52 @@ def _line_centre(profile: np.ndarray, steps: np.ndarray) -> np.ndarray:
     return centre
 
 
+WALL_MIN_SHIFT = 0.5
+"""A wall outline this far behind the first line has something drawn in front of it. On a
+plain wall the two agree to a tenth of a pixel and the first line is kept."""
+LINE_WINDOW = 6.0
+"""How far outside the region the first line is looked for, in pixels."""
+WALL_WINDOW = 8.0
+"""How far outside the region a wall is looked for, in pixels: a fixture line and the
+outline of the wall behind it reach 5 px, and 1 px of fill must follow."""
+
+
+def _wall_centre(profile: np.ndarray, steps: np.ndarray, fill: np.ndarray, centre: np.ndarray) -> np.ndarray:
+    """``centre`` with the profiles that reach a wall placed at the outline of that wall.
+
+    A fixture drawn along a wall puts a line 1 to 3 px in front of the wall outline, or
+    merges with it into one wide black run. The first line met is then not the wall. A
+    wall is known by its grey fill: where 1 px of fill follows within the window, the
+    outline is the black run that ends at the fill, and the room edge is its centre,
+    measured from the fill side, whatever is drawn in front of it. Profiles without fill
+    (thin walls, openings, a separator between two rooms) and plain walls keep their
+    centre. The first line is not examined: a separator that runs 3 to 4 px in front of a
+    filled wall is taken for a fixture line.
+    """
+    rows = np.arange(len(profile))
+    first = (profile >= 40).argmax(axis=1)
+    step = steps[1] - steps[0]
+    count = profile.shape[1]
+    run = int(round(1.0 / step))
+    total = np.cumsum(np.pad(fill, ((0, 0), (1, 0))), axis=1)
+    full = (total[:, run:] - total[:, :-run]) == run
+    full &= np.arange(full.shape[1])[None, :] >= first[:, None]
+    has_fill = full.any(axis=1)
+    start = full.argmax(axis=1)
+    falling = (profile[:, :-1] >= FILL_EDGE) & (profile[:, 1:] < FILL_EDGE)
+    falling &= np.arange(1, count)[None, :] <= start[:, None] + 1
+    has_edge = falling.any(axis=1)
+    j = count - 1 - falling[:, ::-1].argmax(axis=1)
+    j = np.clip(j, 1, count - 1)
+    outer = steps[j - 1] + step * (profile[rows, j - 1] - FILL_EDGE) / np.maximum(profile[rows, j - 1] - profile[rows, j], 1e-6)
+    before = np.take_along_axis(profile, np.maximum(j[:, None] - np.arange(1, 2 * run + 1)[None, :], 0), axis=1)
+    black = before.max(axis=1) >= 200
+    wall = outer - (OUTLINE_WIDTH - HALF_WIDTH_BLACK)
+    # (the comparison is False where no line was found)
+    use = has_fill & has_edge & black & (wall - centre >= WALL_MIN_SHIFT)
+    return np.where(use, wall, centre)
+
+
 def _shoelace(points: np.ndarray) -> float:
     x, y = points[:, 0], points[:, 1]
     return 0.5 * abs(float(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1))))
@@ -576,8 +718,14 @@ def measure_rooms(
     pixels_per_metre: float,
     text_boxes: list[tuple[float, float, float, float]] = (),
     raster: Raster | None = None,
+    debug: dict | None = None,
 ) -> list[RoomMeasure]:
-    """Measure the room around each seed point. ``image`` is an RGB array."""
+    """Measure the room around each seed point. ``image`` is an RGB array.
+
+    A ``debug`` dict receives the intermediate state, for error analysis: "raster",
+    "labels" and "stats" (the free components), "graph" (their contacts), "exterior",
+    "neutral", "seed_of" (the component of each seed) and "owner" (component -> room).
+    """
     raster = raster or classify(image, text_boxes, pixels_per_metre)
     height, width = raster.grey.shape
     free = (~raster.ink).astype(np.uint8)
@@ -671,13 +819,25 @@ def measure_rooms(
             owner.update(new)
             changed = True
 
+    fill_region = cv2.morphologyEx(
+        ((np.abs(raster.grey - WALL_GREY) <= 8) & ~raster.red).astype(np.uint8), cv2.MORPH_OPEN, K3
+    ).astype(bool)
+    # A fixture that the loop above could not reach. One fixture may lie behind another.
+    while fixtures := _enclosed_fixtures(labels, stats, fill_region, owner, exterior, neutral, scale):
+        owner.update(fixtures)
+        neutral.difference_update(fixtures)
+
+    if debug is not None:
+        debug.update(
+            raster=raster, labels=labels, stats=stats, graph=graph, exterior=exterior,
+            neutral=neutral, seed_of=seed_of, owner=owner,
+        )
+
     members: dict[int, list[int]] = {}
     for component, index in owner.items():
         members.setdefault(index, []).append(component)
 
-    fill_region = cv2.morphologyEx(
-        ((np.abs(raster.grey - WALL_GREY) <= 8) & ~raster.red).astype(np.uint8), cv2.MORPH_OPEN, K3
-    ).astype(bool)
+    fill_float = fill_region.astype(np.float32)
     for index, room in enumerate(rooms):
         components = members.get(index)
         if not components:
@@ -708,7 +868,7 @@ def measure_rooms(
         room.shade = float(np.median(floor)) if len(floor) else None
         if closed[0].any() or closed[-1].any() or closed[:, 0].any() or closed[:, -1].any():
             room.flags.append("open-region")
-        outer, hole_polygons = _refine(closed, raster.dark, (x0, y0))
+        outer, hole_polygons = _refine(closed, raster.dark, fill_float, (x0, y0))
         if outer is None:
             room.flags.append("no-region")
             continue

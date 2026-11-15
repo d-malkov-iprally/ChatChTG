@@ -89,6 +89,7 @@ The `areas` composer answers area questions on Swiss floor plans from a room tab
 ```sh
 CHATCHTG_COMPOSER=areas uv run chatchtg serve
 uv run chatchtg eval data/floorplans --questions questions-subset.jsonl --composer areas
+uv run chatchtg eval data/floorplans --questions questions-subset.jsonl --composer areas --evidence
 ```
 
 - **Labels** (`areas/labels.py`): local OCR reads the scale, the room numbers, names, printed areas and apartment tags.
@@ -98,12 +99,16 @@ uv run chatchtg eval data/floorplans --questions questions-subset.jsonl --compos
 
 When the pipeline is confident of its result, code states the answer and no LLM is called. The text names the rooms that were added up, says for each whether its area was printed on the plan or measured from the drawn lines, adds a caution when a measured area comes from a plan at 1:200 or coarser or when a total is from a plan whose room numbering has a gap, and ends with `Answer: <value> m²`. It is in English for a question in any language. The response's model is then `area-pipeline`, and the answer costs nothing. The LLM gets the image and the room table when the pipeline cannot answer. Other questions are composed as in the baseline. The first question on a drawing takes several seconds of CPU for the OCR; later questions on the same drawing reuse the analysis.
 
+When the pipeline's result is the answer, the response carries `method` (`printed`, `measured` or `printed+measured`) and `evidence`: the rooms that were added up, with their outlines, and the total. The app draws these rooms on the drawing: blue for an area printed on the drawing, orange for an outline that code measured, violet for rooms measured as one region because no wall was found between them. Each room has a tag with its number and its area. Next to the drawing the app names the method, lists the rooms and the total, and has a control to zoom to one room and a switch that brings back the plain drawing. When the LLM answers with the image, the response has no evidence and the app says so.
+
 To score the pipeline without any LLM call:
 
 ```sh
 uv sync --dev                                   # ezdxf and shapely, for the ground truth
 uv run python scripts/build_room_truth.py       # room areas from the DXF twins, into var/room-truth
 uv run python scripts/eval_areas.py --plans 100 # answers the area questions of 100 plans in code
+uv run python scripts/eval_areas.py --stems docs/benchmarks/stems/heldout-200.txt --refresh   # of exactly these plans
+uv run python scripts/eval_measure.py --stems docs/benchmarks/stems/tune-200.txt   # the measurer alone, with the failure pattern of each wrong room
 uv run python scripts/eval_labels.py 20 20      # the label reader alone
 uv run python scripts/eval_membership.py        # the aggregation rules and apartment membership alone
 ```
@@ -116,6 +121,8 @@ uv run python scripts/eval_area_statement.py --results var/eval-runs/areas-fake.
 ```
 
 The script counts only the rows with the model `area-pipeline`. In a run with the fake provider every other row is answered by the fake LLM and is not a result: ignore the accuracy that `chatchtg eval` prints for such a run.
+
+`eval_measure.py` takes the label positions from the DXF truth, so every error it reports is an error of the measurer; `--compare OLD.jsonl` lists the rooms that changed against an earlier run. The lists in [docs/benchmarks/stems](docs/benchmarks/stems/) split the plans of each scale into the 20 the measurer was tuned on and the rest. `eval_areas.py` keeps each analysis in `var/area-cache` by the plan name: pass `--refresh` after a change to the pipeline. Both scripts read the plans from `CHATCHTG_DATA_ROOT`.
 
 To measure what a cross-check of measured areas against an LLM would change, without building it (the result is in [docs/benchmarks/2026-11-15-area-cross-check.md](docs/benchmarks/2026-11-15-area-cross-check.md)):
 
@@ -168,7 +175,7 @@ CHATCHTG_LLM_PROVIDER=modal uv run chatchtg eval data/preview --sample 20 --max-
 
 The results and the cost assume that the endpoint serves Kimi K3.1 Pro. For an endpoint with another model, set `CHATCHTG_LLM_MODEL` to that model's name and add its price to `llm/pricing.py`. `eval --judge` still uses the Claude judge, so it also needs an Anthropic key.
 
-`--sample N` answers N questions, balanced over source and question type; `--seed` changes the pick. `--max-cost` stops the run before its cost passes that many US dollars. Each result line records the token usage and the cost of its answer. If a run is interrupted, run the same command again with the same `--out` file and `--resume`: it keeps the answers and asks only the remaining questions. `--resume` needs `--out`. A question whose drawing is missing or not readable is skipped, and the run prints how many it skipped.
+`--sample N` answers N questions, balanced over source and question type; `--seed` changes the pick. `--max-cost` stops the run before its cost passes that many US dollars. Each result line records the token usage and the cost of its answer. If a run is interrupted, run the same command again with the same `--out` file and `--resume`: it keeps the answers and asks only the remaining questions. `--resume` needs `--out`. With `--evidence`, each result line also has `method` and `evidence` (the items that the app draws on the drawing), so a wrong answer that code made can be inspected later. It is off by default because it makes the result file much larger (about 1 to 3 KB for each area answer); a run resumed with another `--evidence` choice has both kinds of lines. A question whose drawing is missing or not readable is skipped, and the run prints how many it skipped.
 
 Claude needs an Anthropic key, and each request is billed to that key's account. Keep the key in this project:
 
@@ -208,7 +215,7 @@ Almost half of the benchmark questions count rooms: bedrooms, saunas, kitchens, 
   uv run chatchtg eval data/floorplans --composer room-conventions --questions questions-subset.jsonl
   ```
 
-- **The room counter** (`rooms/`) answers a room-count question in code: it reads the printed labels with OCR, maps them to the question with a lexicon, and counts apartments and storeys from shapes. It costs nothing per question, but it is less accurate than Opus 5.5 on every kind of question except apartments. So `CHATCHTG_ROOM_COUNTER=confident` uses it only for apartments, when the unit tags and the unit outlines agree; `always` uses it for every room-count question and is for runs without an LLM budget. The response then carries `method` and `evidence` (the counted labels with their boxes).
+- **The room counter** (`rooms/`) answers a room-count question in code: it reads the printed labels with OCR, maps them to the question with a lexicon, and counts apartments and storeys from shapes. It costs nothing per question, but it is less accurate than Opus 5.5 on every kind of question except apartments. So `CHATCHTG_ROOM_COUNTER=confident` uses it only for apartments, when the unit tags and the unit outlines agree; `always` uses it for every room-count question and is for runs without an LLM budget. The response then carries `method` and `evidence` (the counted labels with their boxes), and the app draws the counted labels as boxes on the drawing.
 
   The OCR engine is Apple Vision, so the counter works on macOS only. On another system it steps aside and the LLM answers. OCR results are cached in `var/ocr-cache/`.
 
@@ -242,5 +249,6 @@ blobs.py   metadata.py
   - `claude` (`llm/claude.py`): sends the system prompt and one user message (the images and text, in order) to the Anthropic Messages API. The completion records the model that served the request and the token usage. If the model declines a request, the API retries it on a fallback model; if that also declines, the answer says so and the run continues.
   - `modal` (`llm/modal.py`): sends the system prompt and one user message to a Modal Shared Endpoint through its OpenAI-compatible Chat Completions API. The completion records the model that the endpoint is set to serve and the token usage; reasoning tokens count as output tokens. If the model spends its whole output limit on reasoning, the answer says so and the run continues. A failed request is not sent again.
 - **Judge** (`evals/judge.py`): `Judge.read(question, unit, response) -> Judgement`. It is separate from `LLMClient` because it is not the system that the eval measures.
-- **Interface** (`ui/app.py`): holds no logic. The eval runner calls the same `AnswerService`, not the UI.
+- **Evidence** (`evidence.py`): the format of evidence items (where an answer comes from on the drawing), the words for each method, and the function that draws the items on the drawing. The interface calls it.
+- **Interface** (`ui/app.py`): holds no logic. It shows the answer, how it was made, and its evidence on the drawing. The eval runner calls the same `AnswerService`, not the UI.
 - **Schemas** (`schemas.py`): the request and response of an interaction. Add new fields as optional.

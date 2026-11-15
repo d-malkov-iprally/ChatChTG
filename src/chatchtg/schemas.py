@@ -21,6 +21,8 @@ class AnswerResponse(BaseModel):
     model: str
     """Model name reported by the LLM client."""
     method: str | None = None
-    """How a room count was made when code made it, not the LLM: ``labels``, ``shapes``, ``usual``."""
+    """How code made the answer (a room count or an area total) when the LLM did not: ``labels``,
+    ``shapes``, ``usual``, ``printed``, ``measured``, ... The words are in ``chatchtg.evidence``."""
     evidence: list[dict[str, Any]] = Field(default_factory=list)
-    """What the code counted: ``{"text", "box"}``, the box in image pixels (x0, y0, x1, y1)."""
+    """Where the answer comes from on the drawing: items as the contract in ``chatchtg.evidence``
+    says, for example ``{"text", "box"}`` with the box in image pixels (x0, y0, x1, y1)."""

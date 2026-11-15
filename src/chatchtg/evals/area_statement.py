@@ -19,8 +19,8 @@ def report(rows: list[dict[str, Any]], compare: list[dict[str, Any]] | None = No
     stated_correct: of those, ``row["correct"]`` is True (the rule on the code-made text)
     value_correct:  of those, the pipeline's own unrounded value is correct by the rule
     text_lost_the_value: the stated rows whose value is correct and whose text is not
-    not_answered:   area rows with another model. In a run with the fake provider they are
-                    not results.
+    not_answered:   area rows that code did not answer: they have another model, so they
+                    went to the LLM. In a run with the fake provider they are not results.
 
     With ``compare`` (the rows of a run on the same questions), for the stated rows only:
     compare_correct, compare_cost_usd, compare_missing (stated rows that the other run
