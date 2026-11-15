@@ -37,6 +37,8 @@ dev = [
     "pytest>=8",
     "shapely>=2.2.0",
 ]
+# For the training commands of object_detector/. Use it with `uv run --group train modal ...`.
+train = ["modal>=1.1"]
 
 [build-system]
 requires = ["hatchling"]
@@ -47,3 +49,5 @@ packages = ["src/chatchtg"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# object_detector/ is a folder at the root, not a part of the chatchtg package.
+pythonpath = ["."]
