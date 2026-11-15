@@ -204,7 +204,7 @@ Almost half of the benchmark questions count rooms: bedrooms, saunas, kitchens, 
 
 ## Answers that show where they came from
 
-With the `located` composer, a count question also asks the model for the position of each item it counted. The app then draws one green mark for each item on the drawing, so a person can see a miss or a double count without counting again. It is an experiment and not a default: the measurement is in [docs/benchmarks/2026-11-15-located-answers.md](docs/benchmarks/2026-11-15-located-answers.md).
+With the `located` composer, a count question also asks the model for the position of each item it counted. The app then draws one green mark for each item on the drawing, so a person can see a miss or a double count without counting again. It is an experiment and not a default. Measured with Kimi K3.1 Pro on 42 count questions against the baseline of the same model: the same number of object counts correct (11 of 23), 4 more room counts correct (18 against 14 of 19), 1.36 times the cost per question, and 74 of 81 reviewed marks on an item of the asked kind ([record](docs/benchmarks/2026-11-15-located-answers.md)).
 
 - **Which questions:** those that start with a counting phrase in English, Finnish, German, French or Italian (`How many`, `Kuinka monta`, `Wie viele`, `Combien`, `Quanti`/`Quante`). Every other question gets the baseline context.
 - **What the response carries:** `evidence` items `{"text": "<label> <n>", "kind": "llm", "point": [x, y]}` in pixels of the stored image, and the method `llm-located`. These are marks that the LLM claimed. Code did not check them against the drawing, and the app says so.
