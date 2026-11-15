@@ -1,4 +1,5 @@
 import io
+import json
 from pathlib import Path
 
 import pytest
@@ -196,3 +197,86 @@ def test_app_draws_the_marks_of_the_llm_and_warns_when_the_count_differs(tmp_pat
     assert any("counted by the LLM" in block.value for block in app.caption)
     assert any("Evidence on plan.png" in caption for image in app.image for caption in image.captions)
     assert app.table[0].value.to_dict("records")[0]["Item"] == "door 1"
+
+
+def demo_set(tmp_path, monkeypatch, names=("first.png", "second.png")):
+    """A demo set of drawings that exist below the data root of the test."""
+    folder = tmp_path / "data" / "floorplans" / "data" / "swiss_dwellings"
+    folder.mkdir(parents=True)
+    entries = []
+    for number, name in enumerate(names):
+        (folder / name).write_bytes(real_png((8 + number, 8)))
+        entries.append({
+            "path": f"floorplans/data/swiss_dwellings/{name}", "title": f"Plan {number}", "note": "a note",
+            "questions": [
+                {"label": "Doors", "text": f"How many doors on plan {number}?", "reference": "7"},
+                {"label": "Windows", "text": f"How many windows on plan {number}?", "reference": "3"},
+            ],
+        })
+    file = tmp_path / "demo_set.json"
+    file.write_text(json.dumps(entries))
+    monkeypatch.setattr("chatchtg.demo.DEMO_SET", file)
+    monkeypatch.setenv("CHATCHTG_DATA_ROOT", str(tmp_path / "data"))
+    monkeypatch.setenv("CHATCHTG_STATE_DIR", str(tmp_path / "state"))
+
+
+def labels(app):
+    return [button.label for button in app.button]
+
+
+def test_app_opens_on_the_demo_drawings_and_a_chip_asks_its_question(tmp_path, monkeypatch):
+    demo_set(tmp_path, monkeypatch)
+
+    app = AppTest.from_file(APP).run()
+
+    assert not app.exception
+    assert app.segmented_control[0].value == "★ Demo drawings"
+    assert "1 · Plan 0" in labels(app) and "2 · Plan 1" in labels(app)
+    assert any("★ Suggested" in block.value for block in app.markdown)
+    assert any("DEMO" in block.value and "first.png" in block.value for block in app.markdown)
+    assert "1 · Doors" in labels(app) and "2 · Windows" in labels(app)
+
+    next(button for button in app.button if button.label == "2 · Windows").click().run()
+
+    assert not app.exception
+    assert any('class="assistant-question">How many windows on plan 0?<' in block.value for block in app.markdown)
+    assert any("Benchmark answer: 3" in block.value for block in app.caption)
+    assert "✓ · Windows" in labels(app) and "1 · Doors" in labels(app)      # the trail marks what was asked
+
+
+def test_app_changes_the_questions_with_the_demo_drawing(tmp_path, monkeypatch):
+    demo_set(tmp_path, monkeypatch)
+    app = AppTest.from_file(APP).run()
+    next(button for button in app.button if button.label == "1 · Doors").click().run()
+
+    next(button for button in app.button if button.label == "2 · Plan 1").click().run()
+
+    assert not app.exception
+    assert any("second.png" in block.value for block in app.markdown)
+    assert not any("How many doors on plan 0?" in block.value for block in app.markdown)   # never on another drawing
+    assert "1 · Doors" in labels(app)                                    # not asked on this drawing
+    assert next(button for button in app.button if button.label == "1 · Doors").help == "How many doors on plan 1?"
+
+
+def test_app_marks_a_demo_drawing_among_the_registered_documents(tmp_path, monkeypatch):
+    demo_set(tmp_path, monkeypatch, names=("first.png",))
+    build_library(Settings.from_env()).add_upload(real_png((5, 5)), "other.png")
+
+    app = AppTest.from_file(APP).run()
+    app.segmented_control[0].set_value("Registered document").run()
+
+    assert not app.exception
+    options = app.selectbox[0].options
+    assert any(option.startswith("★ first.png") for option in options)
+    assert any(option.startswith("other.png") for option in options)
+
+
+def test_app_without_the_demo_files_has_no_demo_drawings(tmp_path, monkeypatch):
+    monkeypatch.setenv("CHATCHTG_DATA_ROOT", str(tmp_path / "data"))
+    monkeypatch.setenv("CHATCHTG_STATE_DIR", str(tmp_path / "state"))
+
+    app = AppTest.from_file(APP).run()
+
+    assert not app.exception
+    assert app.segmented_control[0].options == ["Upload an image", "Registered document"]
+    assert not any("Suggested" in block.value for block in app.markdown)

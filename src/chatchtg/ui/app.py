@@ -4,11 +4,14 @@ the evidence module, which decides what is drawn on the drawing and how."""
 from __future__ import annotations
 
 import html
+import io
 import json
 
 import streamlit as st
+from PIL import Image
 
 from chatchtg.config import Settings
+from chatchtg.demo import load_demo_set, register_demo_set
 from chatchtg.documents.library import UnsupportedDocumentError
 from chatchtg.evidence import colour_key, describe_method, geometry, legend_rows, render_evidence
 from chatchtg.schemas import AnswerRequest
@@ -21,7 +24,21 @@ st.set_page_config(page_title="ChatChTG", page_icon="🧭", layout="wide")
 def services():
     settings = Settings.from_env()
     library = build_library(settings)
-    return library, build_answer_service(settings, library)
+    demo = register_demo_set(library, settings.data_root, load_demo_set())
+    return library, build_answer_service(settings, library), demo
+
+
+@st.cache_data(show_spinner=False)
+def thumbnail(document_id: str, _library) -> bytes | None:
+    """A small copy of the drawing for its card, or None when it is not a readable image."""
+    try:
+        image = Image.open(io.BytesIO(_library.read(document_id))).convert("RGB")
+    except Exception:
+        return None
+    image.thumbnail((360, 240))
+    small = io.BytesIO()
+    image.save(small, format="PNG")
+    return small.getvalue()
 
 
 def inject_styles() -> None:
@@ -128,6 +145,20 @@ def inject_styles() -> None:
         .st-key-assistant_panel [data-testid="stCaptionContainer"] { color: #aebbd0; font-size: 0.7rem; }
         .st-key-assistant_panel .stMarkdown { color: #edf1fa; font-size: 0.91rem; line-height: 1.55; }
 
+        .demo-heading { margin: 0.1rem 0 0.55rem; color: #f5d98a; font-size: 0.8rem; font-weight: 740; letter-spacing: 0.06em; text-transform: uppercase; }
+        .demo-heading span { margin-left: 0.6rem; color: #aebbd0; font-weight: 500; letter-spacing: 0; text-transform: none; }
+        .st-key-demo_strip { margin-bottom: 0.7rem; padding: 0.7rem 0.8rem 0.5rem; border: 1px solid rgba(245, 217, 138, 0.5); border-radius: 0.5rem; background: rgba(15, 21, 33, 0.78); }
+        .st-key-demo_strip [data-testid="stImage"] { padding: 0.25rem; background: #fff; border-radius: 0.3rem; }
+        .st-key-demo_strip [data-testid="stImage"] img { height: 5.2rem; object-fit: contain; background: #fff; }
+        .st-key-demo_strip button { min-height: 2.9rem; color: #edf1fa; background: rgba(8, 13, 23, 0.5); border: 1px solid rgba(174, 189, 223, 0.36); border-radius: 0.4rem; }
+        .st-key-demo_strip button p { font-size: 0.74rem; line-height: 1.2; }
+        .st-key-demo_strip button[kind="primary"] { color: #1a1405; background: #f5d98a; border-color: #f5d98a; font-weight: 700; }
+        .demo-badge { margin-right: 0.5rem; padding: 0.08rem 0.42rem; color: #1a1405; background: #f5d98a; border-radius: 0.3rem; font-size: 0.7rem; font-weight: 760; }
+        .st-key-question_chips { margin: 0.35rem 0 0.8rem; gap: 0.35rem; }
+        .st-key-question_chips button { min-height: 1.8rem; padding: 0.1rem 0.7rem; color: #f5d98a; background: rgba(245, 217, 138, 0.08); border: 1px solid rgba(245, 217, 138, 0.55); border-radius: 1rem; }
+        .st-key-question_chips button p { font-size: 0.78rem; }
+        .st-key-question_chips button[kind="primary"] { color: #9fe3c2; background: rgba(105, 210, 164, 0.12); border-color: rgba(105, 210, 164, 0.6); }
+
         .empty-state { padding: 2.6rem 1.5rem; text-align: center; color: #dce3f2; border: 1px dashed rgba(183, 196, 226, 0.42); border-radius: 0.5rem; background: rgba(13, 19, 30, 0.5); }
         .empty-state strong { display: block; margin-bottom: 0.45rem; color: #fff; font-size: 1.05rem; }
         .empty-state span { color: #aebbd0; font-size: 0.9rem; }
@@ -169,36 +200,97 @@ def render_header() -> None:
     )
 
 
-def render_document_picker(library):
-    source = st.segmented_control(
-        "Document",
-        ["Upload an image", "Registered document"],
-        default="Upload an image",
-        label_visibility="collapsed",
-    )
-    # A click on the selected option clears the control: that is still the upload.
-    if source in (None, "Upload an image"):
+DEMO, UPLOAD, REGISTERED = "★ Demo drawings", "Upload an image", "Registered document"
+
+
+def choose_demo_drawing(index: int) -> None:
+    st.session_state["demo_drawing"] = index
+
+
+def render_demo_picker(library, demo):
+    """The hand-picked drawings as a row of cards. Returns the chosen drawing and its record."""
+    chosen = min(st.session_state.get("demo_drawing", 0), len(demo) - 1)
+    with st.container(key="demo_strip", border=False):
+        st.markdown(
+            '<div class="demo-heading">★ Suggested'
+            "<span>Each drawing has ready questions with the benchmark's answer to compare with.</span></div>",
+            unsafe_allow_html=True,
+        )
+        for index, column in enumerate(st.columns(len(demo), gap="small")):
+            drawing, record = demo[index]
+            with column:
+                small = thumbnail(record.id, library)
+                if small is not None:
+                    st.image(small, width="stretch")
+                st.button(
+                    f"{index + 1} · {drawing.title}",
+                    key=f"demo-{index}",
+                    help=drawing.note or None,
+                    type="primary" if index == chosen else "secondary",
+                    width="stretch",
+                    on_click=choose_demo_drawing,
+                    args=(index,),
+                )
+    drawing, record = demo[chosen]
+    return drawing, record
+
+
+def render_document_picker(library, demo):
+    """Returns the open document and, for a drawing of the demo set, its entry."""
+    options = [DEMO, UPLOAD, REGISTERED] if demo else [UPLOAD, REGISTERED]
+    source = st.segmented_control("Document", options, default=options[0], label_visibility="collapsed")
+    # A click on the selected option clears the control: that is still the first option.
+    if source is None:
+        source = options[0]
+    if source == DEMO:
+        drawing, record = render_demo_picker(library, demo)
+        return record, drawing
+    by_id = {record.id: drawing for drawing, record in demo}
+    if source == UPLOAD:
         upload = st.file_uploader("Drawing (PNG or JPEG)")
         if upload is None:
-            return None
+            return None, None
         try:
-            return library.add_upload(upload.getvalue(), upload.name)
+            record = library.add_upload(upload.getvalue(), upload.name)
         except UnsupportedDocumentError as error:
             st.error(str(error))
-            return None
+            return None, None
+        return record, by_id.get(record.id)
 
     records = library.list(limit=200)
     if records:
-        return st.selectbox(
+        record = st.selectbox(
             "Registered documents (newest 200)",
             records,
-            format_func=lambda record: f"{record.filename} ({record.id[:8]})",
+            format_func=lambda record: (
+                f"{'★ ' if record.id in by_id else ''}{record.filename} ({record.id[:8]})"
+            ),
         )
+        return record, by_id.get(record.id)
     st.info("No documents yet. Upload one, or run `chatchtg ingest data/preview`.")
-    return None
+    return None, None
 
 
-def render_workspace(document, library, answer_service) -> None:
+def ask_demo_question(document_id: str, index: int) -> None:
+    st.session_state["demo_question"] = (document_id, index)
+
+
+def keep_answer(answer_service, document, message: str, reference: str | None) -> None:
+    """Answer the question and keep the answer for the reruns that the controls cause."""
+    with st.spinner("Analyzing drawing..."):
+        response = answer_service.answer(AnswerRequest(document_id=document.id, message=message))
+    st.session_state.setdefault("asked", set()).add((document.id, message))
+    # The number gives the controls of each answer their own state.
+    st.session_state["answer"] = {
+        "document_id": document.id,
+        "message": message,
+        "response": response,
+        "reference": reference,
+        "number": st.session_state.get("answer", {}).get("number", 0) + 1,
+    }
+
+
+def render_workspace(document, library, answer_service, demo_drawing=None) -> None:
     try:
         content = library.read(document.id)
     except Exception as error:  # the file is gone or was replaced
@@ -206,7 +298,10 @@ def render_workspace(document, library, answer_service) -> None:
         st.stop()
 
     filename = html.escape(document.filename)
-    st.markdown(f'<div class="drawing-tab">{filename}</div>', unsafe_allow_html=True)
+    badge = '<span class="demo-badge">★ DEMO</span>' if demo_drawing is not None else ""
+    title = f" · {html.escape(demo_drawing.title)}" if demo_drawing is not None else ""
+    st.markdown(f'<div class="drawing-tab">{badge}{filename}{title}</div>', unsafe_allow_html=True)
+    questions = demo_drawing.questions if demo_drawing is not None else ()
     image_column, assistant_column = st.columns((2.5, 1), gap="small")
 
     # The assistant column runs first, because the image depends on the answer and on the zoom control.
@@ -222,6 +317,25 @@ def render_workspace(document, library, answer_service) -> None:
                 '<p class="assistant-intro">Ask a precise question about the open drawing. The answer stays connected to this sheet.</p>',
                 unsafe_allow_html=True,
             )
+            pending = st.session_state.pop("demo_question", None)
+            if pending is not None and pending[0] == document.id and pending[1] < len(questions):
+                question = questions[pending[1]]
+                keep_answer(answer_service, document, question.text, question.reference)
+            if questions:
+                # The trail of the demo: a click asks the question, a tick marks the ones asked.
+                asked = st.session_state.get("asked", set())
+                st.markdown('<div class="question-label">Demo questions</div>', unsafe_allow_html=True)
+                with st.container(key="question_chips", horizontal=True, border=False):
+                    for index, question in enumerate(questions):
+                        done = (document.id, question.text) in asked
+                        st.button(
+                            f"{'✓' if done else index + 1} · {question.label}",
+                            key=f"chip-{document.id[:12]}-{index}",
+                            help=question.text,
+                            type="primary" if done else "secondary",
+                            on_click=ask_demo_question,
+                            args=(document.id, index),
+                        )
             with st.form("ask"):
                 message = st.text_area(
                     "Ask about this drawing",
@@ -230,18 +344,8 @@ def render_workspace(document, library, answer_service) -> None:
                 submitted = st.form_submit_button("Analyze drawing")
 
             if submitted and message.strip():
-                with st.spinner("Analyzing drawing..."):
-                    response = answer_service.answer(
-                        AnswerRequest(document_id=document.id, message=message)
-                    )
-                # Kept for the reruns that the controls below cause. The number gives the controls
-                # of each answer their own state.
-                st.session_state["answer"] = {
-                    "document_id": document.id,
-                    "message": message,
-                    "response": response,
-                    "number": st.session_state.get("answer", {}).get("number", 0) + 1,
-                }
+                reference = next((q.reference for q in questions if q.text == message.strip()), None)
+                keep_answer(answer_service, document, message, reference)
             answer = st.session_state.get("answer")
             if answer is not None and answer["document_id"] == document.id:  # never on another drawing
                 response = answer["response"]
@@ -255,6 +359,8 @@ def render_workspace(document, library, answer_service) -> None:
                 st.markdown(response.text)
                 st.caption(f"Composer: {response.composer} · Model: {response.model}")
                 st.caption(f"Method: {describe_method(response.method)}")
+                if answer.get("reference"):
+                    st.caption(f"Benchmark answer: {answer['reference']}")
                 if response.evidence_note:
                     st.warning(response.evidence_note)
                 if response.evidence:
@@ -331,11 +437,11 @@ def render_empty_workspace() -> None:
 
 
 inject_styles()
-library, answer_service = services()
+library, answer_service, demo = services()
 render_header()
-document = render_document_picker(library)
+document, demo_drawing = render_document_picker(library, demo)
 
 if document is None:
     render_empty_workspace()
 else:
-    render_workspace(document, library, answer_service)
+    render_workspace(document, library, answer_service, demo_drawing)
