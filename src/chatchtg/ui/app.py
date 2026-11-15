@@ -1,4 +1,5 @@
-"""Streamlit user interface. It holds no logic: it calls the library and the answer service."""
+"""Streamlit user interface. It holds no logic: it calls the library, the answer service and
+the evidence module, which decides what is drawn on the drawing and how."""
 
 from __future__ import annotations
 
@@ -9,6 +10,7 @@ import streamlit as st
 
 from chatchtg.config import Settings
 from chatchtg.documents.library import UnsupportedDocumentError
+from chatchtg.evidence import colour_key, describe_method, geometry, legend_rows, render_evidence
 from chatchtg.schemas import AnswerRequest
 from chatchtg.wiring import build_answer_service, build_library
 
@@ -85,8 +87,6 @@ def inject_styles() -> None:
             border: 1px solid rgba(193, 204, 232, 0.27); border-bottom: 0; border-radius: 0.5rem 0.5rem 0 0;
             font-size: 0.88rem; font-weight: 650;
         }
-        .drawing-tab .close { color: #aeb8cd; font-size: 1.05rem; }
-        .drawing-tab .add { color: #d3c3ff; margin-left: 0.25rem; font-size: 1.25rem; font-weight: 400; }
 
         .st-key-drawing_canvas {
             padding: 0.8rem 0.8rem 0.55rem; border: 1px solid rgba(174, 189, 223, 0.64);
@@ -101,7 +101,6 @@ def inject_styles() -> None:
         }
         .canvas-caption { display: flex; align-items: center; justify-content: space-between; margin: 0 0.2rem 0.65rem; color: #c1ccdc; font-size: 0.78rem; }
         .canvas-caption strong { color: #f5f7fc; font-weight: 650; }
-        .canvas-coordinates { color: #9b7ee3; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.7rem; }
         .st-key-drawing_canvas [data-testid="stImage"] { padding: 0.85rem; background: #fff; border: 1px solid rgba(220, 226, 237, 0.9); box-shadow: 0 16px 28px rgba(0, 0, 0, 0.28); }
         .st-key-drawing_canvas [data-testid="stImage"] img { background: #fff; object-fit: contain; max-height: 26rem; }
         .canvas-status { display: flex; gap: 1rem; margin: 0.7rem 0.2rem 0.05rem; color: #bdc7d8; font-size: 0.72rem; }
@@ -177,7 +176,8 @@ def render_document_picker(library):
         default="Upload an image",
         label_visibility="collapsed",
     )
-    if source == "Upload an image":
+    # A click on the selected option clears the control: that is still the upload.
+    if source in (None, "Upload an image"):
         upload = st.file_uploader("Drawing (PNG or JPEG)")
         if upload is None:
             return None
@@ -199,20 +199,102 @@ def render_document_picker(library):
 
 
 def render_workspace(document, library, answer_service) -> None:
+    try:
+        content = library.read(document.id)
+    except Exception as error:  # the file is gone or was replaced
+        st.error(f"This drawing cannot be shown: {error}")
+        st.stop()
+
     filename = html.escape(document.filename)
-    st.markdown(
-        f'<div class="drawing-tab">{filename}<span class="close">×</span><span class="add">+</span></div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown(f'<div class="drawing-tab">{filename}</div>', unsafe_allow_html=True)
     image_column, assistant_column = st.columns((2.5, 1), gap="small")
+
+    # The assistant column runs first, because the image depends on the answer and on the zoom control.
+    evidence = []  # of the answer that is shown, when it is shown on the drawing
+    focus = None
+    with assistant_column:
+        with st.container(key="assistant_panel", border=False):
+            st.markdown(
+                '<div class="assistant-heading"><span class="assistant-spark">✦</span>AI Assistant</div>',
+                unsafe_allow_html=True,
+            )
+            st.markdown(
+                '<p class="assistant-intro">Ask a precise question about the open drawing. The answer stays connected to this sheet.</p>',
+                unsafe_allow_html=True,
+            )
+            with st.form("ask"):
+                message = st.text_area(
+                    "Ask about this drawing",
+                    placeholder="How many doors are in this floor plan?",
+                )
+                submitted = st.form_submit_button("Analyze drawing")
+
+            if submitted and message.strip():
+                with st.spinner("Analyzing drawing..."):
+                    response = answer_service.answer(
+                        AnswerRequest(document_id=document.id, message=message)
+                    )
+                # Kept for the reruns that the controls below cause. The number gives the controls
+                # of each answer their own state.
+                st.session_state["answer"] = {
+                    "document_id": document.id,
+                    "message": message,
+                    "response": response,
+                    "number": st.session_state.get("answer", {}).get("number", 0) + 1,
+                }
+            answer = st.session_state.get("answer")
+            if answer is not None and answer["document_id"] == document.id:  # never on another drawing
+                response = answer["response"]
+                # The form can hold a later question that was not answered.
+                st.markdown('<div class="question-label">Your question</div>', unsafe_allow_html=True)
+                st.markdown(
+                    f'<div class="assistant-question">{html.escape(answer["message"])}</div>',
+                    unsafe_allow_html=True,
+                )
+                st.markdown('<div class="assistant-answer-label">Drawing answer</div>', unsafe_allow_html=True)
+                st.markdown(response.text)
+                st.caption(f"Composer: {response.composer} · Model: {response.model}")
+                st.caption(f"Method: {describe_method(response.method)}")
+                if response.evidence:
+                    st.table(legend_rows(response.evidence))
+                    drawn = [index for index, item in enumerate(response.evidence) if geometry(item) is not None]
+                    if drawn and st.toggle(
+                        "Show the evidence on the drawing", value=True, key=f"show-{answer['number']}"
+                    ):
+                        evidence = response.evidence
+                        focus = st.selectbox(
+                            "Zoom to",
+                            [None, *drawn],
+                            format_func=lambda index: (
+                                # The number is the row of the table: items can have the same text.
+                                "Whole drawing" if index is None else f"{index}: {evidence[index].get('text', '')}"
+                            ),
+                            key=f"zoom-{answer['number']}",
+                        )
+                else:
+                    st.info("No evidence on the drawing for this answer.")
 
     with image_column:
         with st.container(key="drawing_canvas", border=False):
             st.markdown(
-                f'<div class="canvas-caption"><strong>{filename}</strong><span class="canvas-coordinates">MODEL · 1:100 · 0,0</span></div>',
+                f'<div class="canvas-caption"><strong>{filename}</strong></div>',
                 unsafe_allow_html=True,
             )
-            st.image(library.read(document.id), width="stretch")
+            annotated = None
+            if evidence:
+                try:
+                    annotated = render_evidence(content, evidence, focus)
+                except Exception:  # a fault in the evidence must not hide the drawing
+                    st.warning("The evidence could not be drawn. This is the plain drawing.")
+            try:
+                if annotated is not None:
+                    st.image(annotated, caption=f"Evidence on {document.filename}", width="stretch")
+                    st.markdown(" · ".join(f":{colour}[■] {words}" for colour, words in colour_key(evidence)))
+                else:
+                    st.image(content, width="stretch")
+            except Exception as error:  # not a real image
+                st.error(f"This drawing cannot be shown: {error}")
+                st.stop()
             st.markdown(
                 '<div class="canvas-status"><span>Drawing ready</span><span>White paper view</span></div>',
                 unsafe_allow_html=True,
@@ -237,36 +319,6 @@ def render_workspace(document, library, answer_service) -> None:
                             library.patch_attributes(document.id, {**attributes, **removed})
                             st.success("Drawing details saved.")
 
-    with assistant_column:
-        with st.container(key="assistant_panel", border=False):
-            st.markdown(
-                '<div class="assistant-heading"><span class="assistant-spark">✦</span>AI Assistant</div>',
-                unsafe_allow_html=True,
-            )
-            st.markdown(
-                '<p class="assistant-intro">Ask a precise question about the open drawing. The answer stays connected to this sheet.</p>',
-                unsafe_allow_html=True,
-            )
-            with st.form("ask"):
-                message = st.text_area(
-                    "Ask about this drawing",
-                    placeholder="How many doors are in this floor plan?",
-                )
-                submitted = st.form_submit_button("Analyze drawing")
-
-            if submitted and message.strip():
-                with st.spinner("Analyzing drawing..."):
-                    response = answer_service.answer(
-                        AnswerRequest(document_id=document.id, message=message)
-                    )
-                st.markdown('<div class="question-label">Your question</div>', unsafe_allow_html=True)
-                st.markdown(
-                    f'<div class="assistant-question">{html.escape(message)}</div>',
-                    unsafe_allow_html=True,
-                )
-                st.markdown('<div class="assistant-answer-label">Drawing answer</div>', unsafe_allow_html=True)
-                st.markdown(response.text)
-                st.caption(f"Composer: {response.composer} · Model: {response.model}")
 
 def render_empty_workspace() -> None:
     with st.container(key="drawing_canvas", border=False):

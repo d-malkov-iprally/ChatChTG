@@ -5,12 +5,14 @@ import pytest
 from chatchtg.answering import AnswerService
 from chatchtg.cli import main
 from chatchtg.context.baseline import BaselineComposer
+from chatchtg.context.types import ComputedAnswer, Context, TextPart
+from chatchtg.evals.area_statement import report
 from chatchtg.evals.runner import UnknownPriceError, run_eval
 from chatchtg.evals.scoring import extract_number, score
 from chatchtg.llm.client import Completion
 from chatchtg.llm.fake import FakeLLM
 from chatchtg.llm.pricing import cost_usd
-from conftest import PNG
+from conftest import PNG, EvidenceComposer
 
 
 @pytest.mark.parametrize(
@@ -109,6 +111,50 @@ def test_cli_ingest_is_idempotent_and_eval_runs(dataset, tmp_path, monkeypatch, 
     assert len(out_path.read_text().splitlines()) == 3
 
 
+def test_cli_eval_writes_the_evidence_only_with_the_option(dataset, tmp_path, monkeypatch):
+    monkeypatch.setenv("CHATCHTG_DATA_ROOT", str(dataset.parent))
+    monkeypatch.setenv("CHATCHTG_STATE_DIR", str(tmp_path / "state"))
+    monkeypatch.setenv("CHATCHTG_LLM_PROVIDER", "fake")
+    with_option, without = tmp_path / "with.jsonl", tmp_path / "without.jsonl"
+
+    assert main(["eval", str(dataset), "--out", str(with_option), "--evidence"]) == 0
+    assert main(["eval", str(dataset), "--out", str(without)]) == 0
+
+    row = json.loads(with_option.read_text().splitlines()[0])
+    assert row["evidence"] == [] and row["method"] is None    # the baseline composer gives none
+    assert "evidence" not in json.loads(without.read_text().splitlines()[0])
+
+
+def test_run_eval_records_the_method_and_the_evidence_on_request(dataset, library, tmp_path):
+    service = AnswerService(library, EvidenceComposer(), FakeLLM(reply="The answer is 4"))
+    out_path = tmp_path / "result.jsonl"
+
+    run_eval(dataset, library, service, out_path, evidence=True)
+
+    rows = [json.loads(line) for line in out_path.read_text().splitlines()]
+    assert rows[0]["method"] == "printed"
+    assert rows[0]["evidence"] == [{"text": "1.01", "kind": "printed", "value": 8.0, "unit": "m²", "point": [4, 5]}]
+
+
+def test_run_eval_records_an_empty_evidence_for_a_plain_llm_answer_on_request(dataset, library, service, tmp_path):
+    out_path = tmp_path / "result.jsonl"
+
+    run_eval(dataset, library, service, out_path, evidence=True)
+
+    row = json.loads(out_path.read_text().splitlines()[0])
+    assert row["method"] is None and row["evidence"] == []
+
+
+def test_run_eval_leaves_the_evidence_out_by_default(dataset, library, tmp_path):
+    service = AnswerService(library, EvidenceComposer(), FakeLLM(reply="The answer is 4"))
+    out_path = tmp_path / "result.jsonl"
+
+    run_eval(dataset, library, service, out_path)
+
+    row = json.loads(out_path.read_text().splitlines()[0])
+    assert "method" not in row and "evidence" not in row
+
+
 def test_cli_eval_without_questions_file_writes_nothing(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("CHATCHTG_STATE_DIR", str(tmp_path / "state"))
 
@@ -184,6 +230,36 @@ def test_run_eval_with_a_cost_limit_needs_a_known_price(dataset, library, tmp_pa
     assert len(out_path.read_text().splitlines()) == 1
 
 
+class StatedComposer:
+    """A composer whose context carries an answer that code computed and stated."""
+
+    name = "stated"
+    version = 1
+
+    def compose(self, request):
+        return Context(
+            system="Not sent.",
+            parts=[TextPart(text=request.message)],
+            computed=ComputedAnswer(value=50.004, basis="printed", statement="Area of room 1.\n\nAnswer: 50.00 m²"),
+        )
+
+
+def test_a_code_stated_answer_costs_nothing_and_passes_a_cost_limit(dataset, library, tmp_path):
+    # The LLM has no price: a call to it would raise UnknownPriceError under a cost limit.
+    service = AnswerService(library, StatedComposer(), MeteredLLM(model="unknown-model"))
+    out_path = tmp_path / "result.jsonl"
+
+    run = run_eval(dataset, library, service, out_path, max_cost=1.0)
+
+    rows = [json.loads(line) for line in out_path.read_text().splitlines()]
+    assert cost_usd("area-pipeline", {}) == 0
+    assert len(rows) == 3
+    assert all(row["model"] == "area-pipeline" and row["cost_usd"] == 0 for row in rows)
+    assert rows[1]["correct"] is True and rows[1]["extracted_value"] == 50.0
+    assert rows[1]["context"]["computed"] == {"value": 50.004, "unit": "m2", "basis": "printed", "doubts": []}
+    assert run.cost_usd == 0 and run.stopped_for_cost is False
+
+
 def test_run_eval_sample_is_balanced_and_repeatable(dataset, library, service, tmp_path):
     first = tmp_path / "first.jsonl"
     second = tmp_path / "second.jsonl"
@@ -222,3 +298,82 @@ def test_run_eval_resume_keeps_answers_and_asks_only_the_rest(dataset, library, 
     assert [json.loads(line)["question"] for line in lines] == ["Windows?", "Area?", "Room name?"]
     assert sum(counts["total"] for counts in run.summary.values()) == 3
     assert run.cost_usd == pytest.approx(18.0)
+
+
+def test_run_eval_resume_drops_a_line_that_was_cut_off(dataset, library, tmp_path):
+    out_path = tmp_path / "result.jsonl"
+    service = AnswerService(library, BaselineComposer(), FakeLLM(reply="The answer is 4"))
+    run_eval(dataset, library, service, out_path)
+    complete = out_path.read_text().splitlines(keepends=True)
+    out_path.write_text("".join(complete[:2]) + complete[2][:20])
+
+    run = run_eval(dataset, library, service, out_path, resume=True)
+
+    rows = [json.loads(line) for line in out_path.read_text().splitlines()]
+    assert [row["question"] for row in rows] == ["Windows?", "Area?", "Room name?"]
+    assert sum(counts["total"] for counts in run.summary.values()) == 3
+
+
+def test_run_eval_counts_the_questions_it_skips(dataset, library, service, tmp_path):
+    question = {"path": "data/cubicasa5k/gone.png", "question": "Windows?", "answer": 4, "type": "count"}
+    with (dataset / "questions.jsonl").open("a") as out:
+        out.write(json.dumps(question) + "\n")
+
+    run = run_eval(dataset, library, service, tmp_path / "result.jsonl")
+
+    assert run.skipped == 1
+    assert sum(counts["total"] for counts in run.summary.values()) == 3
+
+
+def test_cli_eval_refuses_resume_without_out(dataset, tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CHATCHTG_STATE_DIR", str(tmp_path / "state"))
+
+    assert main(["eval", str(dataset), "--resume"]) == 2
+    assert "--resume needs --out" in capsys.readouterr().err
+    assert not (tmp_path / "state" / "eval-runs").exists()
+
+
+def test_cli_eval_reports_an_unknown_setting(dataset, tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("CHATCHTG_STATE_DIR", str(tmp_path / "state"))
+    monkeypatch.setenv("CHATCHTG_ROOM_COUNTER", "sometimes")
+
+    assert main(["eval", str(dataset)]) == 2
+    assert "Unknown room counter mode" in capsys.readouterr().err
+
+
+def test_the_statement_report_counts_only_code_stated_rows():
+    rows = [
+        {"type": "area", "model": "area-pipeline", "expected": 20.6, "correct": True,
+         "context": {"computed": {"value": 20.627}}, "path": "a.png", "question": "q1", "cost_usd": 0},
+        {"type": "area", "model": "fake", "expected": 5.0, "correct": False,
+         "context": {}, "path": "b.png", "question": "q2", "cost_usd": 0},
+        {"type": "count", "model": "fake", "expected": 3, "correct": False,
+         "context": {}, "path": "c.png", "question": "q3", "cost_usd": 0},
+    ]  # fmt: skip
+    compare = [
+        {"type": "area", "path": "a.png", "question": "q1", "correct": False, "cost_usd": 0.004},
+        {"type": "area", "path": "b.png", "question": "q2", "correct": True, "cost_usd": 0.04},
+    ]
+
+    result = report(rows, compare)
+
+    assert (result["stated"], result["stated_correct"], result["value_correct"]) == (1, 1, 1)
+    assert result["not_answered"] == 1
+    assert result["compare_correct"] == 0 and result["compare_cost_usd"] == pytest.approx(0.004)
+    assert [row["question"] for row in result["gained"]] == ["q1"] and result["lost"] == []
+    assert result["text_lost_the_value"] == [] and result["compare_missing"] == 0
+
+
+def test_the_statement_report_names_a_row_whose_text_lost_a_right_value():
+    rows = [
+        {"type": "area", "model": "area-pipeline", "expected": 8.48, "correct": False,
+         "context": {"computed": {"value": 8.3128}}, "path": "a.png", "question": "q1", "cost_usd": 0},
+        {"type": "area", "model": "area-pipeline", "expected": 30.0, "correct": False,
+         "context": {"computed": {"value": 20.0}}, "path": "a.png", "question": "q2", "cost_usd": 0},
+    ]  # fmt: skip
+
+    result = report(rows)
+
+    assert (result["stated"], result["stated_correct"], result["value_correct"]) == (2, 0, 1)
+    assert [row["question"] for row in result["text_lost_the_value"]] == ["q1"]
+    assert "compare_correct" not in result

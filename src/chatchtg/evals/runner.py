@@ -31,6 +31,8 @@ class EvalRun:
     """Cost of the answers and of the judge, for the models that have a known price."""
     stopped_for_cost: bool = False
     """True when the run ended early because the next question could pass ``max_cost``."""
+    skipped: int = 0
+    """Questions left out because their drawing is missing, unreadable or outside the dataset."""
 
 
 def read_questions(
@@ -72,6 +74,7 @@ def run_eval(
     max_cost: float | None = None,
     resume: bool = False,
     judge: Judge | None = None,
+    evidence: bool = False,
 ) -> EvalRun:
     """Write one JSON line per question to ``out_path``. Return the counts and the cost.
 
@@ -83,11 +86,17 @@ def run_eval(
     would pass it. One question that costs more than every question before it can still
     pass the limit.
     ``resume`` continues a run that was interrupted: the answers already in ``out_path``
-    are kept and counted, and their questions are not asked again.
+    are kept and counted, and their questions are not asked again. A last line that the
+    interruption cut off is removed, and its question is asked again.
 
     With a ``judge``, each answer that the rule can score is also read by the judge. The row
     gets ``judge_*`` fields and the counts get ``judged``, ``judge_correct`` and ``disagree``.
     ``correct`` stays the result of the rule.
+
+    With ``evidence``, each row also gets ``method`` (how code made the answer, or null) and
+    ``evidence`` (the items that the app draws on the drawing, see ``chatchtg.evidence``; an
+    empty list when there are none). Without it neither key is written: the rows of an area
+    answer would be 1 to 3 KB larger each. A resumed run keeps the earlier rows as they are.
     """
     questions: Iterator[dict[str, Any]] | list[dict[str, Any]]
     questions = read_questions(dataset_dir, questions_file)
@@ -105,7 +114,7 @@ def run_eval(
     largest_cost = 0.0
     answered: set[tuple[str, str]] = set()
     if resume and out_path.is_file():
-        for row in _read_rows(out_path):
+        for row in _read_complete_rows(out_path):
             answered.add((row["path"], row["question"]))
             _count(summary, zero, row["type"], row["correct"], row.get("judge_correct"))
             row_cost = (row.get("cost_usd") or 0.0) + (row.get("judge_cost_usd") or 0.0)
@@ -126,6 +135,7 @@ def run_eval(
                 document_ids[path] = _register(library, dataset_dir, path)
             document_id = document_ids[path]
             if document_id is None:
+                run.skipped += 1
                 continue
 
             trace = service.answer_traced(
@@ -150,6 +160,8 @@ def run_eval(
                 "usage": trace.completion.usage,
                 "cost_usd": cost,
             }
+            if evidence:
+                row |= {"method": trace.response.method, "evidence": trace.response.evidence}
             costs = [(trace.completion.model, cost)]
             judge_correct = None
             if judge is not None and correct is not None:
@@ -205,6 +217,16 @@ def _count(
         counts["disagree"] += int(judge_correct != correct)
 
 
-def _read_rows(path: Path) -> list[dict[str, Any]]:
-    with path.open(encoding="utf-8") as lines:
-        return [json.loads(line) for line in lines if line.strip()]
+def _read_complete_rows(path: Path) -> list[dict[str, Any]]:
+    """Return the rows of an earlier run. Remove a last line that was cut off mid-write.
+
+    Without the removal, the cut-off line could not be parsed, and the next row would be
+    appended to it.
+    """
+    data = path.read_bytes()
+    end = data.rfind(b"\n") + 1
+    if end != len(data):
+        with path.open("r+b") as out:
+            out.truncate(end)
+    # Not splitlines(): it also splits on separators that a JSON string may contain.
+    return [json.loads(line) for line in data[:end].decode("utf-8").split("\n") if line.strip()]

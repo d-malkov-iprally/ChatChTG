@@ -1,4 +1,5 @@
 import io
+import sys
 from pathlib import Path
 
 import pytest
@@ -8,7 +9,7 @@ from streamlit.testing.v1 import AppTest
 import chatchtg.ui
 from chatchtg.cli import main
 from chatchtg.detection import MODELS, Detection, count_by_label, draw_detections, parse_labels
-from chatchtg.detection import models
+from chatchtg.detection import UnreadableImageError, models, open_image, to_rgb
 from chatchtg.detection.cubicasa.classes import CLASSES, canonical_label
 
 # Not imported as a module: an import runs the script outside Streamlit, and its open form
@@ -94,6 +95,8 @@ def test_app_refuses_a_folder_outside_the_data_folder(tmp_path, monkeypatch):
     try:
         (data_root / "link.png").symlink_to(tmp_path / "secret.png")
     except OSError as error:
+        if sys.platform != "win32":  # elsewhere a failure here must not hide this test
+            raise
         pytest.skip(f"Creating symlinks is not permitted on this host: {error}")
     monkeypatch.setenv("CHATCHTG_DATA_ROOT", str(data_root))
 
@@ -188,3 +191,55 @@ def test_app_names_the_labels_that_the_fixed_class_model_does_not_know(tmp_path,
     assert not app.exception
     assert [warning.value for warning in app.warning] == ["CubiCasa5K does not know: shower."]
     assert app.metric[0].value == "2"
+
+
+def test_to_rgb_puts_a_transparent_drawing_on_white():
+    image = Image.new("RGBA", (4, 4), (0, 0, 0, 0))
+    image.putpixel((1, 1), (0, 0, 0, 255))
+
+    flat = to_rgb(image)
+
+    assert flat.mode == "RGB"
+    assert flat.getpixel((0, 0)) == (255, 255, 255)
+    assert flat.getpixel((1, 1)) == (0, 0, 0)
+
+
+def test_to_rgb_scales_16_bit_grey_values():
+    image = Image.new("I;16", (2, 1))
+    image.putpixel((0, 0), 0x8000)
+    image.putpixel((1, 0), 0xFFFF)
+
+    flat = to_rgb(image)
+
+    assert [flat.getpixel((x, 0)) for x in range(2)] == [(128, 128, 128), (255, 255, 255)]
+
+
+def test_open_image_applies_the_exif_rotation(tmp_path):
+    exif = Image.Exif()
+    exif[0x0112] = 6  # the camera was turned: show the image rotated by 90 degrees
+    Image.new("RGB", (64, 48), "white").save(tmp_path / "photo.jpg", exif=exif)
+
+    assert open_image(tmp_path / "photo.jpg").size == (48, 64)
+
+
+def test_open_image_refuses_a_file_that_is_not_an_image(tmp_path):
+    (tmp_path / "bad.png").write_bytes(b"\x89PNG\r\n\x1a\n" + b"garbage")
+
+    with pytest.raises(UnreadableImageError):
+        open_image(tmp_path / "bad.png")
+
+
+def test_app_reports_an_image_it_cannot_open(tmp_path, monkeypatch):
+    (tmp_path / "bad.png").write_bytes(b"not an image")
+    monkeypatch.setenv("CHATCHTG_DATA_ROOT", str(tmp_path))
+
+    app = AppTest.from_file(APP, default_timeout=30).run()
+    app.segmented_control(key="source").set_value("Dataset folder").run()
+
+    assert not app.exception
+    assert len(app.error) == 1 and "cannot be opened as an image" in app.error[0].value
+    assert app.button[0].disabled
+
+    app.text_input(key="folder").set_value("a\0b").run()
+    assert not app.exception
+    assert [error.value for error in app.error] == ["The folder must be inside the data folder."]

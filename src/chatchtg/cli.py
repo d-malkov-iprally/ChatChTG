@@ -63,10 +63,18 @@ def evaluate(args: argparse.Namespace) -> int:
     if not (dataset_dir / args.questions).is_file():
         print(f"No {args.questions} in {dataset_dir}", file=sys.stderr)
         return 2
+    if args.resume and args.out is None:
+        # Without --out the run gets a new file, and nothing would be resumed.
+        print("--resume needs --out: the results file of the run to continue", file=sys.stderr)
+        return 2
     settings = Settings.from_env()
-    composer = get_composer(args.composer or settings.composer)
-    library = build_library(settings)
-    service = build_answer_service(settings, library, composer=composer.name)
+    try:
+        composer = get_composer(args.composer or settings.composer)
+        library = build_library(settings)
+        service = build_answer_service(settings, library, composer=composer.name)
+    except ValueError as error:  # a CHATCHTG_* setting with an unknown value
+        print(error, file=sys.stderr)
+        return 2
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     out_path = args.out or settings.state_dir / "eval-runs" / f"{stamp}-{composer_id(composer)}.jsonl"
     judge = build_judge(settings) if args.judge else None
@@ -83,6 +91,7 @@ def evaluate(args: argparse.Namespace) -> int:
             max_cost=args.max_cost,
             resume=args.resume,
             judge=judge,
+            evidence=args.evidence,
         )
     except UnknownPriceError as error:
         print(f"{error} Answers so far: {out_path}", file=sys.stderr)
@@ -112,6 +121,8 @@ def evaluate(args: argparse.Namespace) -> int:
         print(line)
     answered = sum(counts["total"] for counts in summary.values())
     print(f"Questions answered: {answered}. Cost: ${run.cost_usd:.2f}.")
+    if run.skipped:
+        print(f"Questions skipped because the drawing is missing or not readable: {run.skipped}.")
     if run.stopped_for_cost:
         print(f"Stopped early: the next question could pass the ${args.max_cost:.2f} limit.")
     print(f"Results: {out_path}")
@@ -173,6 +184,12 @@ def main(argv: list[str] | None = None) -> int:
         "--judge",
         action="store_true",
         help="also have a small model read each answer (one more LLM call per scored answer)",
+    )
+    eval_parser.add_argument(
+        "--evidence",
+        action="store_true",
+        help="also write the method and the evidence of each answer to its result row "
+        "(with --resume, the rows of the earlier run stay as they are)",
     )
     eval_parser.set_defaults(run=evaluate)
 
