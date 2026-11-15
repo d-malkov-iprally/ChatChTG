@@ -3,7 +3,12 @@
     uv run python scripts/replay_routing.py <routing run with the fake LLM> <earlier LLM run>
 
 A row of the routing run whose model is ``fake`` is a question that the routing sends to the
-LLM. Its answer is taken from the earlier run, which must hold the same questions.
+LLM. Its answer is taken from the earlier run, which must hold the questions of the routing run.
+
+This is a replay and not a run of the routing: the earlier answers were given with the context
+of the earlier run, which the routing does not send for every question. The counts also do not
+say on which plans the code paths were fitted, so the totals are not a comparison with the
+baseline (README, "Object counting").
 """
 
 from __future__ import annotations
@@ -15,8 +20,16 @@ from pathlib import Path
 
 
 def load(path: Path) -> dict[tuple[str, str], dict]:
-    rows = (json.loads(line) for line in path.read_text().splitlines() if line.strip())
-    return {(row["path"], row["question"]): row for row in rows}
+    found: dict[tuple[str, str], dict] = {}
+    for line in path.read_text().splitlines():
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        key = (row["path"], row["question"])
+        if key in found:
+            raise ValueError(f"{path} holds the question {key} twice: which answer counts is not known")
+        found[key] = row
+    return found
 
 
 def sign_test(fixed: int, broken: int) -> float:
@@ -26,6 +39,9 @@ def sign_test(fixed: int, broken: int) -> float:
 
 
 def replay(routing: dict, llm: dict) -> dict[str, int | float]:
+    missing = [key for key in routing if key not in llm]
+    if missing:
+        raise ValueError(f"The earlier run has no answer for {len(missing)} questions of the routing run, first {missing[0]}")
     code = code_right = llm_right = fixed = broken = 0
     for key, row in routing.items():
         earlier = bool(llm[key]["correct"])
@@ -39,7 +55,8 @@ def replay(routing: dict, llm: dict) -> dict[str, int | float]:
         broken += earlier and not right
     return {
         "questions": len(routing),
-        "plain_llm_right": sum(bool(row["correct"]) for row in llm.values()),
+        # On the questions of the routing run only: the earlier run may hold more.
+        "plain_llm_right": sum(bool(llm[key]["correct"]) for key in routing),
         "routing_right": code_right + llm_right,
         "code_answered": code,
         "code_right": code_right,
