@@ -4,6 +4,7 @@ import pytest
 
 from chatchtg.answering import AnswerService
 from chatchtg.context.baseline import BaselineComposer
+from chatchtg.context.types import Context, TextPart
 from chatchtg.documents.blobs import LocalBlobStore
 from chatchtg.documents.library import DocumentLibrary
 from chatchtg.documents.metadata import SqliteMetadataStore
@@ -11,6 +12,18 @@ from chatchtg.llm.fake import FakeLLM
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"fake png body"
 JPEG = b"\xff\xd8\xff" + b"fake jpeg body"
+
+
+class EvidenceComposer:
+    """A composer whose context states a code-made answer with one evidence item."""
+
+    name, version = "stub", 1
+
+    def compose(self, request):
+        return Context(
+            system="s", parts=[TextPart(text=request.message)], method="printed",
+            evidence=[{"text": "1.01", "kind": "printed", "value": 8.0, "unit": "m²", "point": [4, 5]}],
+        )
 
 
 @pytest.fixture(autouse=True)

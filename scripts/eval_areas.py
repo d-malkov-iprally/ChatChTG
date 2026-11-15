@@ -6,6 +6,10 @@ it is within 2% of the reference. The DXF truth (var/room-truth, built by
 scripts/build_room_truth.py) is used only to say which stage caused an error.
 
 usage: uv run python scripts/eval_areas.py [--plans 100] [--seed 0] [--workers 6] [--refresh]
+       uv run python scripts/eval_areas.py --stems FILE --refresh   # exactly these plans
+
+The plans are read from CHATCHTG_DATA_ROOT (default ``data``). The cache in var/area-cache
+is keyed by the plan name only: pass --refresh after a change to the pipeline.
 """
 
 from __future__ import annotations
@@ -23,8 +27,9 @@ from PIL import Image
 from chatchtg.areas import labels
 from chatchtg.areas.pipeline import PlanAnalysis, analyse_plan
 from chatchtg.areas.questions import answer_query, parse_question
+from chatchtg.config import Settings
 
-DATA = Path("data/floorplans")
+DATA = Settings.from_env().data_root / "floorplans"
 PLANS = DATA / "data" / "swiss_dwellings"
 TRUTH = Path("var/room-truth")
 CACHE = Path("var/area-cache")
@@ -64,6 +69,10 @@ def main() -> None:
     parser.add_argument("--workers", type=int, default=6)
     parser.add_argument("--refresh", action="store_true", help="analyse again, ignore the cache")
     parser.add_argument("--exclude", type=Path, help="file with one plan stem per line to leave out")
+    parser.add_argument(
+        "--stems", type=Path,
+        help="file with one plan stem per line: score exactly these plans (--plans, --seed and --exclude are ignored)",
+    )
     parser.add_argument("--results", type=Path, help="an eval-run file: score its area questions, next to its own answers")
     parser.add_argument("--out", type=Path, default=Path("var/eval-areas.jsonl"))
     args = parser.parse_args()
@@ -90,6 +99,8 @@ def main() -> None:
         stems = [s for s in stems if s not in left_out]
     random.Random(args.seed).shuffle(stems)
     stems = stems[: args.plans]
+    if args.stems:
+        stems = [s for s in args.stems.read_text().split() if s in questions]
 
     CACHE.mkdir(parents=True, exist_ok=True)
     analyses: dict[str, dict] = {}

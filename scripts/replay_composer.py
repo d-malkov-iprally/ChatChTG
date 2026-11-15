@@ -7,9 +7,13 @@
 
 No LLM is called. For each question of the sample, the composer builds its context, and the
 script looks for a row of an earlier run with the same drawing, question and context (system
-prompt, text parts and image hash). The first of ``--runs`` that has one gives the answer
-that is scored; ``--extra`` files are searched after them. A question with no such row has no
-answer: the score is then a range, from all of them wrong to all of them right.
+prompt, text parts, image hash and location request). The first of ``--runs`` that has one
+gives the answer that is scored; ``--extra`` files are searched after them. A question with no
+such row has no answer: the score is then a range, from all of them wrong to all of them right.
+
+A context that carries an answer stated in code (``Context.computed.statement``) is sent to
+no LLM. Its statement is scored, at no cost, and no earlier row is used: an earlier row with
+the same text parts holds the answer of an LLM.
 
 A replay is not a fresh run: the answers were made by the model at another time, and its
 answers are not deterministic. The area pipeline runs (OCR, seconds for each new drawing).
@@ -30,6 +34,9 @@ from chatchtg.context.registry import get_composer
 from chatchtg.documents.metadata import DocumentRecord
 from chatchtg.evals.benchmark import sample_subset
 from chatchtg.evals.runner import read_questions
+from chatchtg.evals.scoring import score
+
+STATED = "stated in code"
 
 MEDIA_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
 
@@ -39,9 +46,9 @@ def _rows(path: Path) -> list[dict[str, Any]]:
         return [json.loads(line) for line in lines if line.strip()]
 
 
-def _key(row: dict[str, Any]) -> tuple[str, str, str]:
-    context = row["context"]
-    return (row["path"], row["question"], json.dumps([context["system"], context["parts"]]))
+def _key(path: str, question: str, context: dict[str, Any]) -> tuple[str, str, str]:
+    """What the LLM gets for a question. Rows of older runs have no ``locations``."""
+    return (path, question, json.dumps([context["system"], context["parts"], context.get("locations")]))
 
 
 def main() -> int:
@@ -60,7 +67,7 @@ def main() -> int:
     for path in [*args.runs, *args.extra]:
         for row in _rows(path):
             if "context" in row:
-                answers[_key(row)].append((path, row))
+                answers[_key(row["path"], row["question"], row["context"])].append((path, row))
 
     composer = get_composer(args.composer)
     questions = list(read_questions(args.dataset_dir, args.questions))
@@ -75,11 +82,19 @@ def main() -> int:
             size_bytes=len(content), sha256="-", location=str(drawing), created_at=datetime.now(),
         )
         request = ComposerInput(document=document, content=content, message=question["question"])
-        context = composer.compose(request).summary()
+        composed = composer.compose(request)
+        context = composed.summary()
         part = context_composer(composer, request)
-        key = (question["path"], question["question"], json.dumps([context["system"], context["parts"]]))
-        found = answers.get(key, [])
+        statement = composed.computed.statement if composed.computed is not None else None
+        found = [] if statement else answers.get(_key(question["path"], question["question"], context), [])
         source, row = found[0] if found else (None, None)
+        if statement:
+            row = {
+                "composer": f"{(part or composer).name}@{(part or composer).version}",
+                "correct": score(question["type"], question["answer"], statement),
+                "response": statement,
+                "cost_usd": 0.0,
+            }
         results.append(
             {
                 "path": question["path"],
@@ -88,7 +103,7 @@ def main() -> int:
                 "expected": question["answer"],
                 "part": part.name if part else composer.name,
                 "adds_text": [p["text"] for p in context["parts"][1:-1] if p["type"] == "text"],
-                "source": source.name if source else None,
+                "source": STATED if statement else source.name if source else None,
                 "composer_of_source": row["composer"] if row else None,
                 "correct": row["correct"] if row else None,
                 "response": row["response"] if row else None,

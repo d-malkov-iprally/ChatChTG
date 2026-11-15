@@ -12,8 +12,24 @@ Anthropic cost.
 16 are Finnish room counts with the conventions, which no earlier run of this sample answered.
 With the baseline's answers in their place it would score 81, as `baseline@1` (81) and
 `areas@2` (81) do in the runs it was replayed from, at about 60% of the baseline's cost.
-A fresh run with Kimi K3.1 Pro on Modal scored 81 of 100 for $2.63, and 48 against 39 for
-`baseline@1` on the 63 questions that both Kimi runs answered.**
+A fresh run with Kimi K3.1 Pro on Modal scored 81 of 100 for $2.63. The comparison of that
+run with a Kimi baseline run (48 against 39 on 63 questions) is not a clean comparison: see
+the correction below.**
+
+**Corrections after review, 2026-11-15.**
+
+- **This page measured `areas@2`.** `main` now has `areas@4`: a confident area answer is
+  stated in code without an LLM call, and the room measurer changed for plans at 1:200. The
+  composer is now `combined@1+areas@4+room-conventions@3`. The scores and the costs of the
+  area questions on this page do not describe it: its confident area answers cost $0 of LLM,
+  and their accuracy is that of the code statement. No replay and no run was made with it.
+  `scripts/replay_composer.py` now scores a code-stated answer by its statement.
+- **The Kimi baseline run did not use the prompt of `baseline@1`.** All 63 rows of
+  `baseline-kimi-k3-1-pro-modal-100.jsonl` have a system prompt that ends with "Keep answer
+  short and concise.", from a change to `context/baseline.py` that was never committed. The
+  combined run used the committed prompt. So no question had the same context in both runs,
+  and the differences below mix the effect of the composer with the effect of that sentence.
+  The totals of each run are as recorded; the comparison between them is not a finding.
 
 ## Routing on the whole benchmark
 
@@ -70,7 +86,7 @@ the image, compared exactly. The first of `--runs` that has such a row gives the
 | **All** | **100** | | | **66 to 82** |
 
 The 33 area contexts are identical to the rows of the `areas@2` run, so the OCR and the
-composer on `main` reproduce that run's contexts exactly. Of these, 32 are text only (the
+composer reproduced that run's contexts exactly when this was measured (with `areas@2`). Of these, 32 are text only (the
 pipeline's result) and one carries the image and the room table.
 
 On the 51 baseline contexts each of the three files has 38 right. They disagree on two
@@ -160,25 +176,27 @@ CHATCHTG_LLM_PROVIDER=modal uv run chatchtg eval data/floorplans --composer comb
 
 **81 of 100 right** (areas 31 of 33, counts 50 of 67). The earlier `baseline@1` run with the
 same model (`baseline-kimi-k3-1-pro-modal-100.jsonl`) stopped at its cost limit after 63
-questions, so the two are compared on those 63 only:
+questions, so the two are compared on those 63 only. The baseline run had another system
+prompt (see the corrections at the top), so read the table as two runs, not as an experiment:
 
 | The same 63 questions | `baseline@1` | `combined@1` | Cost, baseline → combined |
 |---|---|---|---|
 | Area questions (part `areas`) | 8 of 15 | 14 of 15 | $1.05 → $0.05 |
 | Finnish room counts (part `room-conventions`, with conventions) | 11 of 16 | 15 of 16 | $0.15 → $0.11 |
-| Other questions (baseline context in both) | 20 of 32 | 19 of 32 | $1.56 → $1.63 |
+| Other questions (baseline context, with another system prompt in the baseline run) | 20 of 32 | 19 of 32 | $1.56 → $1.63 |
 | **All** | **39 of 63** | **48 of 63** | **$2.76 → $1.78** |
 
 - Areas: 7 answers fixed, 1 broken. Conventions: 4 fixed, none broken. On the questions whose
-  context did not change, 1 answer was fixed and 2 broken: that is the noise of two runs of
-  the same context.
+  composer did not change, 1 answer was fixed and 2 broken. Their system prompt differed
+  between the runs, so this is not the noise of two runs of the same context.
 - With Kimi, unlike Opus on this sample, both gains show: the weaker model reads areas and
   counts rooms worse from the image, so the measured table and the conventions help more.
   The area questions cost a twentieth: Kimi spent many reasoning tokens on them with the
   image (up to $0.24 for one question), and almost none on the text-only result.
-- 15 and 16 questions per group are small. Neither change is proven by this run alone
-  (two-sided sign test: areas 7 to 1, p = 0.07; conventions 4 to 0, p = 0.125); both point
-  the same way as the earlier measurements with Opus.
+- 15 and 16 questions per group are small, and the two runs differ in the system prompt as
+  well as in the composer. Neither change is shown by this comparison (two-sided sign test:
+  areas 7 to 1, p = 0.07; conventions 4 to 0, p = 0.125, and neither test separates the two
+  causes). A Kimi baseline run with the committed prompt was not made.
 
 ## Limits
 
