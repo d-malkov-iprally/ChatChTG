@@ -185,6 +185,8 @@ def run_eval(
                     "judge_cost_usd": cost_usd(judgement.model, judgement.usage),
                 }
                 costs.append((judgement.model, row["judge_cost_usd"]))
+            if trace.response.context_composer is not None:
+                row["context_composer"] = trace.response.context_composer
             out.write(json.dumps(row, ensure_ascii=False) + "\n")
             out.flush()  # keep the answers already paid for if the run is interrupted
             if max_cost is not None:
