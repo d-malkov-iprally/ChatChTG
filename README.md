@@ -207,7 +207,7 @@ Set these in the shell or in `.env`:
 |---|---|---|
 | `CHATCHTG_DATA_ROOT` | `data` | root of the downloaded datasets |
 | `CHATCHTG_STATE_DIR` | `var` | where state is written |
-| `CHATCHTG_COMPOSER` | `baseline` | context composer used by the app: `baseline`, `areas`, `room-conventions`, `located` or `combined` (`areas` and `room-conventions` together, see [Combined composer](#combined-composer)) |
+| `CHATCHTG_COMPOSER` | `baseline` | context composer used by the app: `baseline`, `areas`, `room-conventions`, `located`, `object-hints` (see [Detector hints](#detector-hints)) or `combined` (`areas` and `room-conventions` together, see [Combined composer](#combined-composer)) |
 | `CHATCHTG_ROOM_COUNTER` | `off` | `confident`: code answers a room-count question when it is as accurate as the LLM; `always`: code answers every room-count question; see [Room counting](#room-counting) |
 | `CHATCHTG_OBJECT_COUNTER` | `off` | `detections`: code answers a window, door, toilet, sink or shower-and-bathtub count on a Finnish plan from the detections stored for the drawing; see [Object counting](#object-counting) |
 | `CHATCHTG_LLM_PROVIDER` | `fake` | LLM adapter: `fake`, `claude` or `modal` |
@@ -259,6 +259,23 @@ uv run python -m chatchtg.objects.importer var/detections/detections.jsonl data/
 # Choose the minimum scores on the valid split; score per split; replay eval runs
 uv run python -m chatchtg.objects.tune data/floorplans/questions.jsonl var/detections/detections.jsonl
 uv run python -m chatchtg.objects.report data/floorplans/questions.jsonl --replay var/eval-runs/<run>.jsonl
+```
+
+### Detector hints
+
+The `object-hints` composer lets the LLM count with the detector's candidates as a hint. For an object-count question that the object counter claims, on a drawing with stored detections, the LLM gets the drawing as it is and a copy with the candidate boxes of the asked class(es) outlined and numbered, and a list of the candidates with their scores. The candidates are the detections that the counter counts (magenta) and doubtful ones (blue, `n?`): those that score below the counter's minimum but at least half of it. The model is told that the detector is right about 9 times in 10 per object, that it misses objects, marks wrong ones and can mark one window twice, and that it must check each candidate, look for unmarked objects and end with the count. Every other question, and a drawing without stored detections, gets the baseline context.
+
+- The composer reads no file: it declares the extractions it reads (`reads`), and `AnswerService` loads them from the extraction store into `ComposerInput.extractions`.
+- A small drawing is enlarged to a long edge of 1,400 px before the marks are drawn, a large one reduced to what the API takes (2,576 px, 3.75 MP), so that the numbers stay readable.
+- Do not combine it with `CHATCHTG_OBJECT_COUNTER=detections`: the counter answers first, and the composer's context is not sent.
+- Not measured yet: see [docs/benchmarks/2026-11-15-object-hints.md](docs/benchmarks/2026-11-15-object-hints.md).
+
+```sh
+CHATCHTG_COMPOSER=object-hints uv run chatchtg serve
+# The 150-question sample on test plans (30 per template), and the eval on it
+uv run python scripts/sample_object_questions.py data/floorplans/questions.jsonl var/object-hints/questions-test-150.jsonl --seed 0
+CHATCHTG_LLM_PROVIDER=claude uv run chatchtg eval data/floorplans --composer object-hints \
+  --questions "$PWD/var/object-hints/questions-test-150.jsonl" --max-cost 3 --out var/eval-runs/object-hints-150.jsonl
 ```
 
 ## Answers that show where they came from

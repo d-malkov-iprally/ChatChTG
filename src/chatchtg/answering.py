@@ -11,12 +11,19 @@ from typing import Any, Protocol
 
 from pydantic import BaseModel
 
-from chatchtg.context.composer import Composer, ComposerInput, composer_id, context_composer
+from chatchtg.context.composer import (
+    Composer,
+    ComposerInput,
+    composer_id,
+    composer_reads,
+    context_composer,
+)
 from chatchtg.context.types import Context, ImagePart
 from chatchtg.documents.library import DocumentLibrary
 from chatchtg.evals.scoring import extract_number
 from chatchtg.evidence import METHOD_WORDS
 from chatchtg.evidence_check import LLM_LOCATED, CheckedEvidence, check_locations
+from chatchtg.extractions.models import Extraction
 from chatchtg.llm.client import Completion, LLMClient
 from chatchtg.objects.counter import ObjectFinding
 from chatchtg.rooms.router import Finding
@@ -45,6 +52,12 @@ class ObjectCounter(Protocol):
         ...
 
 
+class ExtractionReader(Protocol):
+    def get(self, document_id: str, producer: str, version: int | None = None) -> Extraction | None:
+        """The stored extraction of one producer version for a drawing, or None."""
+        ...
+
+
 class AnswerTrace(BaseModel):
     """A response together with what produced it. For evals and debugging."""
 
@@ -62,11 +75,14 @@ class AnswerService:
         room_counter: RoomCounter | None = None,
         trust_room_counter: bool = False,
         object_counter: ObjectCounter | None = None,
+        extractions: ExtractionReader | None = None,
     ) -> None:
         """With a ``room_counter``, a room-count question is answered in code when the counter
         is confident, and by the LLM otherwise. ``trust_room_counter`` uses the counter's answer
         even when it is not confident. With an ``object_counter``, an object-count question is
-        answered from the stored detections of the drawing when it has them.
+        answered from the stored detections of the drawing when it has them. With
+        ``extractions``, a composer that reads stored extractions (``composer_reads``) gets
+        those of the drawing.
         """
         self._library = library
         self._composer = composer
@@ -74,6 +90,7 @@ class AnswerService:
         self._room_counter = room_counter
         self._trust_room_counter = trust_room_counter
         self._object_counter = object_counter
+        self._extractions = extractions
 
     def answer(self, request: AnswerRequest) -> AnswerResponse:
         return self.answer_traced(request).response
@@ -81,7 +98,12 @@ class AnswerService:
     def answer_traced(self, request: AnswerRequest) -> AnswerTrace:
         document = self._library.get(request.document_id)
         content = self._library.content(document)
-        composer_input = ComposerInput(document=document, content=content, message=request.message)
+        composer_input = ComposerInput(
+            document=document,
+            content=content,
+            message=request.message,
+            extractions=self._load_extractions(document.id),
+        )
         context = self._composer.compose(composer_input)
         part = context_composer(self._composer, composer_input)
         finding: Finding | ObjectFinding | None = None
@@ -126,6 +148,23 @@ class AnswerService:
             evidence_note=note,
         )
         return AnswerTrace(response=response, context=context, completion=completion)
+
+    def _load_extractions(self, document_id: str) -> list[Extraction]:
+        """The stored extractions that the composer reads, those that exist for the drawing."""
+        if self._extractions is None:
+            return []
+        found = []
+        for producer, version in composer_reads(self._composer):
+            try:
+                extraction = self._extractions.get(document_id, producer, version)
+            except Exception:  # a file that cannot be read gives the composer's fallback context
+                logger.warning(
+                    "The extraction %s@%s of %s cannot be read", producer, version, document_id, exc_info=True
+                )
+                continue
+            if extraction is not None:
+                found.append(extraction)
+        return found
 
     def _state(self, context: Context) -> Completion:
         """The answer text for a context: the statement that code wrote, when the context

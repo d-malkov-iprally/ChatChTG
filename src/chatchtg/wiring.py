@@ -70,6 +70,7 @@ def build_answer_service(
         room_counter=room_counter,
         trust_room_counter=settings.room_counter == "always",
         object_counter=object_counter,
+        extractions=build_extraction_store(settings),
     )
 
 

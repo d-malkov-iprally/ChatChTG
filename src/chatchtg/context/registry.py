@@ -5,6 +5,7 @@ from chatchtg.context.baseline import BaselineComposer
 from chatchtg.context.combined import CombinedComposer
 from chatchtg.context.composer import Composer
 from chatchtg.context.located import LocatedComposer
+from chatchtg.context.object_hints import ObjectHintsComposer
 from chatchtg.context.room_conventions import RoomConventionsComposer
 
 _AREAS = AreaComposer()
@@ -17,6 +18,7 @@ COMPOSERS: dict[str, Composer] = {
         _AREAS,
         _ROOM_CONVENTIONS,
         LocatedComposer(),
+        ObjectHintsComposer(),
         CombinedComposer(areas=_AREAS, room_conventions=_ROOM_CONVENTIONS),
     )
 }

@@ -8,16 +8,20 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from chatchtg.context.types import Context
 from chatchtg.documents.metadata import DocumentRecord
+from chatchtg.extractions.models import Extraction
 
 
 class ComposerInput(BaseModel):
     document: DocumentRecord
     content: bytes
     message: str
+    extractions: list[Extraction] = Field(default_factory=list)
+    """The stored extractions of the drawing that the composer reads (``composer_reads``),
+    those that exist. The answer service loads them, so the composer reads no file."""
 
 
 class Composer(Protocol):
@@ -28,6 +32,9 @@ class Composer(Protocol):
     def compose(self, request: ComposerInput) -> Context: ...
 
 
+# A composer may read stored extractions of the drawing (``extractions/``): it then has
+# ``reads``, a tuple of ``(producer, version)``, and finds them in ``ComposerInput.extractions``.
+#
 # A composer may delegate: it then has ``parts`` (the composers it hands requests to) and
 # ``delegate(request)`` (the part that builds the context of that request), and its
 # ``compose`` returns that part's context unchanged. See ``context/combined.py``.
@@ -51,3 +58,12 @@ def context_composer(composer: Composer, request: ComposerInput) -> Composer | N
         return None
     chosen: Composer = delegate(request)
     return context_composer(chosen, request) or chosen
+
+
+def composer_reads(composer: Composer) -> tuple[tuple[str, int], ...]:
+    """The ``(producer, version)`` of every stored extraction that ``composer`` or one of its
+    parts reads, without repeats."""
+    found: list[tuple[str, int]] = list(getattr(composer, "reads", ()))
+    for part in getattr(composer, "parts", ()):
+        found.extend(composer_reads(part))
+    return tuple(dict.fromkeys(found))
