@@ -74,6 +74,7 @@ def run_eval(
     max_cost: float | None = None,
     resume: bool = False,
     judge: Judge | None = None,
+    evidence: bool = False,
 ) -> EvalRun:
     """Write one JSON line per question to ``out_path``. Return the counts and the cost.
 
@@ -91,6 +92,12 @@ def run_eval(
     With a ``judge``, each answer that the rule can score is also read by the judge. The row
     gets ``judge_*`` fields and the counts get ``judged``, ``judge_correct`` and ``disagree``.
     ``correct`` stays the result of the rule.
+
+    With ``evidence``, each row also gets ``method`` (how the answer was made, or null),
+    ``evidence`` (the items that the app draws on the drawing, see ``chatchtg.evidence``; an
+    empty list when there are none) and ``evidence_note`` (what a check of the evidence found,
+    or null). Without it none of the three is written: the rows of an area
+    answer would be 1 to 3 KB larger each. A resumed run keeps the earlier rows as they are.
     """
     questions: Iterator[dict[str, Any]] | list[dict[str, Any]]
     questions = read_questions(dataset_dir, questions_file)
@@ -154,6 +161,12 @@ def run_eval(
                 "usage": trace.completion.usage,
                 "cost_usd": cost,
             }
+            if evidence:
+                row |= {
+                    "method": trace.response.method,
+                    "evidence": trace.response.evidence,
+                    "evidence_note": trace.response.evidence_note,
+                }
             costs = [(trace.completion.model, cost)]
             judge_correct = None
             if judge is not None and correct is not None:
@@ -172,6 +185,8 @@ def run_eval(
                     "judge_cost_usd": cost_usd(judgement.model, judgement.usage),
                 }
                 costs.append((judgement.model, row["judge_cost_usd"]))
+            if trace.response.context_composer is not None:
+                row["context_composer"] = trace.response.context_composer
             out.write(json.dumps(row, ensure_ascii=False) + "\n")
             out.flush()  # keep the answers already paid for if the run is interrupted
             if max_cost is not None:

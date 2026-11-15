@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
@@ -111,7 +112,13 @@ class DetectorObjectCounter:
         question = classify(message)
         if question is None:
             return None
-        extraction = self._store.get(document_id, self._producer, self._version)
+        try:
+            extraction = self._store.get(document_id, self._producer, self._version)
+        except Exception:  # a detections file that cannot be read must not lose the answer
+            logging.getLogger(__name__).warning(
+                "The detections of %s cannot be read; the LLM answers", document_id, exc_info=True
+            )
+            return None
         if extraction is None:
             return None
         return count(extraction, question, self._thresholds)
