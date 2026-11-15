@@ -1,6 +1,6 @@
 """Read the doors, windows and fixtures of a Swiss Dwellings DXF twin as boxes in PNG pixels.
 
-The DXF files are training labels and a reference for scores only (ADR 0003). The detector
+The DXF files are training labels and a reference for scores only. The detector
 that is trained on these boxes sees only the PNG.
 
 The counting rules reproduce the answers of the benchmark on all 1,040 plans (see

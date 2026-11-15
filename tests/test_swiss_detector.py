@@ -12,6 +12,7 @@ from object_detector.swiss_dataset import (
     STRIDE,
     TILE,
     boxes_in_tile,
+    check_run_name,
     check_labels,
     drawing_area,
     join_tiles,
@@ -154,6 +155,20 @@ def test_all_floors_of_a_site_share_a_split_and_the_split_is_stable():
     assert 0.12 < splits["test"] / 3000 < 0.18
     with pytest.raises(ValueError):
         site_of("colorful-1.png")
+    # Pinned: a change to the hash would move plans between train and test without a sign.
+    assert split_of("site1000_bldg2082_floor9385") == "valid"
+    assert [split_of(f"site{i}_bldg1_floor1") for i in (1, 2, 3)] == ["train", "train", "test"]
+
+
+def test_a_quick_training_cannot_use_the_name_of_a_full_run():
+    check_run_name("swiss-medium-1280", 0)
+    check_run_name("swiss-medium-1280-quick", 200)
+    with pytest.raises(ValueError, match="-quick"):
+        check_run_name("swiss-medium-1280", 200)
+    with pytest.raises(ValueError, match="-quick"):
+        check_run_name("swiss-medium-1280-quick", 0)
+    with pytest.raises(ValueError, match="swiss-"):
+        check_run_name("large-1024", 0)
 
 
 def test_the_drawing_area_is_inside_the_frame_and_above_the_title_block():
@@ -194,6 +209,14 @@ def test_joined_tiles_count_an_object_in_the_overlap_once():
     ]
     joined = join_tiles(found, area)
     assert len(joined) == 1 and joined[0]["box"] == [500, 10, 520, 30]
+
+
+def test_joined_tiles_give_one_box_for_two_objects_at_the_same_place():
+    # A window that the DXF holds twice: the answer counts 2, the joined detections 1.
+    window = {"label": "window", "box": [100, 10, 160, 20]}
+    found = [((0, 0), [{**window, "score": 0.9}, {**window, "score": 0.8}])]
+    joined = join_tiles(found, (0, 0, TILE, TILE))
+    assert len(joined) == 1 and joined[0]["score"] == 0.9
 
 
 def test_label_check_and_plan_scores_compare_with_the_benchmark():

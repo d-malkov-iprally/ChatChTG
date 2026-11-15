@@ -9,8 +9,27 @@ number is scored in code, at $0.
 
 **Result: 89.9% exact on the Swiss test plans (1,518 of 1,688 questions on 163 plans that the
 detector was not trained on and whose minimum scores were not chosen on them). The fixtures are
-92.6% to 99.4%; doors 79.1% and windows 74.2%. All six templates are answered by default under
-`CHATCHTG_OBJECT_COUNTER=detections`.**
+92.6% to 99.4%; doors 79.1% and windows 74.2%.**
+
+**Correction after review, 2026-11-15: the Swiss kinds are off by default.** This page was
+written with all six templates answered by default. That is changed: with
+`CHATCHTG_OBJECT_COUNTER=detections` alone a Swiss question goes to the LLM, and
+`CHATCHTG_OBJECT_COUNTER_SKIP=` (empty) turns the Swiss kinds on. The reasons:
+
+- The Swiss detector was trained on labels from the DXF twins of the plans. The project's rule
+  was that DXF files only score and explain errors, and no ADR says whether a model trained on
+  them may answer ([detector record](2026-11-15-swiss-symbol-detector.md)). On its 727
+  training plans (70% of the Swiss sheets that have detections) it has learnt from the DXF of
+  the very plan that is asked about, and on 150 more its minimum scores were chosen.
+- No Swiss kind was compared with the LLM on held-out plans ([ADR 0002](../ADR/0002-plain-llm-as-baseline.md)).
+- The argument for doors and windows below is an inference, and it does not bound the LLM:
+  the 15 and 126 of 163 are what a method reaches that counts the visible objects exactly, not
+  what any image-only method can reach. The counter is image-only and matches the door answer
+  on 129 of 163 test plans. It does so by counting, on at least 114 of them, more door boxes
+  than the PNG shows doors. So its evidence marks boxes that are not visible doors, and "it
+  shows its boxes" does not make a door count easier to check.
+
+The sections below are kept as written, with the default named where it was stated.
 
 ## What changed
 
@@ -31,7 +50,8 @@ detector was not trained on and whose minimum scores were not chosen on them). T
   document id that the app gives that file. The file names no run; the importer refuses one whose
   minimum scores are not those of the version.
 - **Setting** `CHATCHTG_OBJECT_COUNTER_SKIP`: `profile:kind` pairs that the counter leaves to the
-  LLM. Not set: `DEFAULT_SKIP` in `objects/counter.py`, which is empty.
+  LLM. Not set: `DEFAULT_SKIP` in `objects/counter.py`, which is every Swiss kind (it was empty
+  when this page was written).
 - **Report** (`objects/report.py`): one table per profile; the replay replaces the answers of both.
 
 ## Classifier, checked on every question of the benchmark
@@ -76,8 +96,10 @@ same answer, so each plan is counted twice.
 
 ## Which templates the counter answers
 
-**All six, by default.** `DEFAULT_SKIP` is empty; `CHATCHTG_OBJECT_COUNTER_SKIP=swiss:door,swiss:window`
-leaves doors and windows to the LLM.
+**None by default; all six with `CHATCHTG_OBJECT_COUNTER_SKIP=` (empty).** As written before the
+review, all six were on by default and `CHATCHTG_OBJECT_COUNTER_SKIP=swiss:door,swiss:window`
+left doors and windows to the LLM; the argument for that follows. It is an inference (see the
+correction at the top).
 
 - **Fixtures** (toilets, washbasins, bathtubs, showers): 92.6% to 99.4% exact on test. Clear.
 - **Doors and windows**: the alternative is the LLM, and no LLM number on held-out Swiss plans
@@ -89,7 +111,7 @@ leaves doors and windows to the LLM.
   - Inferred from that: a method that sees only the image and counts every visible door exactly
     would match the answer on 15 of 163 test plans (9%); every visible window exactly, on 126 of
     163 (77.3%). The LLM sees the same image. To beat the counter on windows it would have to
-    count the visible windows exactly on at least 121 of 163 sheets with about 17 windows each
+    count the visible windows exactly on at least 122 of 163 sheets with about 17 windows each
     on average (2,741 counted windows on the 163 test plans). Opus 5.5 got 3 of 15 Finnish
     window counts right in the existing runs (a different dataset; most were large plans). On
     doors it could beat 79% only by guessing the hidden duplicates, which the detector learnt
@@ -104,8 +126,9 @@ leaves doors and windows to the LLM.
 
 ## Replay of the existing Opus runs, at $0
 
-`report --replay` replaces the answer of every question that the counter answers by default
-(Finnish and Swiss) in an existing result file, and scores again. No LLM call.
+`report --replay` replaces the answer of every question that the counter answers (here Finnish
+and Swiss: run it with `CHATCHTG_OBJECT_COUNTER_SKIP=` to repeat these figures) in an existing
+result file, and scores again. No LLM call.
 
 **The "after" totals are inflated and are not a result** ([ADR 0002](../ADR/0002-plain-llm-as-baseline.md)):
 24 of the 32 replaced plans are training plans of a detector, and the sample was not drawn to

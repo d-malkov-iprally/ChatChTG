@@ -129,18 +129,20 @@ SWISS = DetectorProfile(
 
 PROFILES: tuple[DetectorProfile, ...] = (CUBICASA, SWISS)
 
-DEFAULT_SKIP: frozenset[tuple[str, str]] = frozenset()
+DEFAULT_SKIP: frozenset[tuple[str, str]] = frozenset((SWISS.name, kind) for kind in SWISS.classes)
 """(profile, kind) pairs that the counter leaves to the LLM unless
-``CHATCHTG_OBJECT_COUNTER_SKIP`` says otherwise. Empty: every kind of both detectors is
-answered from the detections.
+``CHATCHTG_OBJECT_COUNTER_SKIP`` says otherwise: every Swiss kind.
 
-Swiss doors (79.1% exact on the test plans) and windows (74.2%) are answered too, although
-they are the weakest Swiss kinds. Their benchmark answers count doors and windows that the DXF
-holds twice at one place and the PNG shows once; an image-only method cannot see them. A
-method that counted every visible door exactly would match the answer on only 15 of the 163
-test plans, every visible window on 126 of 163 (77.3%). No LLM has been measured on held-out
-Swiss plans; when it is, and it beats these numbers, add ``("swiss", "door")`` or
-``("swiss", "window")`` here or set the variable.
+The Swiss detector was trained on labels from the DXF twins of the plans. Whether a model
+trained on them may answer is not decided: no ADR covers it (object_detector/README.md). On
+its 727 training plans it has learnt from the DXF of the very plan that is asked about. So
+the Swiss kinds are answered only when the variable is set: empty for all six, or with the
+kinds to leave out.
+
+Doors (79.1% exact on the test plans) and windows (74.2%) need a decision of their own. Their
+benchmark answers count doors and windows that the DXF holds twice at one place and the PNG
+shows once, and the counter matches a door answer by counting boxes that are not visible
+doors. No LLM has been measured on held-out Swiss plans.
 (docs/benchmarks/2026-11-15-swiss-object-counter.md)"""
 
 
