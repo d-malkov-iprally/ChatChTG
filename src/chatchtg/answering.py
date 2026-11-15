@@ -178,7 +178,10 @@ _OBJECTS = {
     "door": "doors",
     "toilet": "toilet bowls",
     "sink": "sinks and wash basins",
+    "washbasin": "washbasins",
     "bath_shower": "showers and bathtubs",
+    "bathtub": "bathtubs",
+    "shower": "showers",
 }
 
 

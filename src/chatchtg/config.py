@@ -35,7 +35,11 @@ class Settings:
     when it is confident. ``always``: code answers every room-count question."""
     object_counter: str = "off"
     """``off``: the LLM answers everything. ``detections``: code answers an object-count question
-    about a Finnish plan from the detections stored for the drawing, when it has them."""
+    about a Finnish or a Swiss plan from the detections stored for the drawing, when it has them."""
+    object_counter_skip: str | None = None
+    """The kinds that the object counter leaves to the LLM, as ``profile:kind`` separated by
+    commas (``swiss:door,swiss:window``); empty: none. None means ``counter.DEFAULT_SKIP``,
+    which is every Swiss kind."""
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Settings:
@@ -59,4 +63,5 @@ class Settings:
             judge_model=env.get("CHATCHTG_JUDGE_MODEL") or None,
             room_counter=env.get("CHATCHTG_ROOM_COUNTER", "off"),
             object_counter=env.get("CHATCHTG_OBJECT_COUNTER", "off"),
+            object_counter_skip=env.get("CHATCHTG_OBJECT_COUNTER_SKIP"),
         )

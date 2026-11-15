@@ -213,4 +213,8 @@ On the Modal volume `chatchtg-object-detector`:
 - The training plans include 11 of the 14 plans with an Opus answer, so those cannot compare the
   two methods.
 - The scale (1:100 or 1:200) in the tables comes from the DXF title; the detector does not use it.
-- The detector does not answer a question. It is not wired into `AnswerService`.
+- The detector does not answer a question by default.
+
+**Update (later the same day):** the object counter can answer the Swiss object questions from
+these detections. That is off by default until an ADR decides whether a model trained on DXF
+labels may answer: [2026-11-15-swiss-object-counter.md](2026-11-15-swiss-object-counter.md).

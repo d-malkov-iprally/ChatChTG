@@ -1,5 +1,8 @@
 """Choose the minimum score of each detector class on the valid split of CubiCasa5K.
 
+The minimum scores of the Swiss detector were chosen by ``object_detector/modal_swiss.py``
+when it scored its run; this module tunes the CubiCasa5K detector only.
+
 Usage: python -m chatchtg.objects.tune <questions.jsonl> <detections.jsonl> [split]
 
 For each kind of object-count question, the minimum score that gives the most exact counts
@@ -16,7 +19,8 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-from chatchtg.objects.questions import KINDS, ObjectQuestion, classify
+from chatchtg.objects.counter import CUBICASA
+from chatchtg.objects.questions import classify
 
 GRID = [round(0.05 + 0.01 * step, 2) for step in range(91)]  # 0.05 .. 0.95
 PAIR_GRID = [round(0.05 + 0.05 * step, 2) for step in range(19)]
@@ -29,7 +33,7 @@ def answers(questions: Path) -> dict[str, dict[str, int]]:
         for line in lines:
             row = json.loads(line)
             question = classify(row["question"])
-            if question is not None and "/cubicasa5k/" in f"/{row['path']}":
+            if question is not None and question.kind in CUBICASA.classes and "/cubicasa5k/" in f"/{row['path']}":
                 found[row["path"].rsplit("/", 1)[-1]][question.kind] = int(row["answer"])
     return found
 
@@ -67,8 +71,7 @@ def tune(
 ) -> dict[str, dict]:
     """Kind -> the chosen minimums, and the exact counts with them and with 0.5."""
     result = {}
-    for kind in KINDS:
-        classes = ObjectQuestion(kind).classes
+    for kind, classes in CUBICASA.classes.items():
         plans = [
             (scores_by_image[image], kinds[kind])
             for image, kinds in answers_by_image.items()
