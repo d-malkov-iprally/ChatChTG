@@ -147,3 +147,17 @@ def test_project_key_goes_to_the_anthropic_client(monkeypatch):
     build_llm("claude")._get_client()
 
     assert created == [{"api_key": "project-key"}, {}]
+
+
+def test_location_request_is_ignored_and_the_request_stays_the_same():
+    """Positions are asked for by the Modal adapter only. Claude answers in plain text."""
+    from chatchtg.context.types import LocationRequest
+
+    plain, asked = StubClient(), StubClient()
+    ClaudeLLM(DEFAULT_MODEL, client=plain).complete(CONTEXT)
+    completion = ClaudeLLM(DEFAULT_MODEL, client=asked).complete(
+        CONTEXT.model_copy(update={"locations": LocationRequest()})
+    )
+
+    assert asked.requests == plain.requests
+    assert completion.locations is None
