@@ -4,7 +4,7 @@ import pytest
 from PIL import Image
 
 from object_detector.classes import CLASSES, FIXTURES
-from object_detector.cubicasa_svg import Box, read_boxes
+from object_detector.cubicasa_svg import Box, _path_points, read_boxes
 from object_detector.dataset import build_dataset, image_name, label_counts, subset_dataset
 from object_detector.scoring import (
     benchmark_answers,
@@ -189,3 +189,22 @@ def test_counts_are_scored_against_the_answers_of_the_benchmark(tmp_path):
     assert scores["How many showers and bathtubs"]["mean_abs_error"] == 1.0
     assert scores["How many doors are shown"]["images"] == 0
     assert "100.0%" in format_scores(scores)
+
+
+def test_diagnose_matches_boxes_of_another_convention_only_when_lenient(monkeypatch):
+    from object_detector import diagnose
+
+    label = [{"label": "toilet", "box": [10, 10, 20, 20]}]
+    larger = [{"label": "toilet", "score": 0.9, "box": [8, 8, 30, 30]}]
+
+    monkeypatch.setattr(diagnose, "LENIENT", False)
+    assert diagnose.match(label, larger) == ({}, [0])
+    monkeypatch.setattr(diagnose, "LENIENT", True)
+    assert diagnose.match(label, larger) == ({0: 0}, [])
+    assert diagnose.size_bucket([0, 0, 40, 8], 4096, 1024) == "<10px"
+
+
+def test_a_path_with_numbers_after_a_close_command_is_not_read():
+    # It once never returned: the numbers after Z were never consumed.
+    assert _path_points("M0,0 L10,0 Z 5,5") == []
+    assert _path_points("M0,0 L10,0 Z M5,5 L6,6") != []

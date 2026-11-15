@@ -24,8 +24,18 @@ class Settings:
     """The provider's model. None means the adapter's default."""
     anthropic_api_key: str | None = field(default=None, repr=False)
     """This project's Anthropic key. None means the Anthropic SDK's own credential lookup."""
+    modal_endpoint: str | None = None
+    """The hostname of the Modal endpoint that the modal provider calls."""
+    modal_proxy_token: str | None = field(default=None, repr=False)
+    """A Modal proxy token in its combined form, ``wk-<id>.ws-<secret>``."""
     judge_model: str | None = None
     """The model of the eval judge. None means the judge's default."""
+    room_counter: str = "off"
+    """``off``: the LLM answers everything. ``confident``: code answers a room-count question
+    when it is confident. ``always``: code answers every room-count question."""
+    object_counter: str = "off"
+    """``off``: the LLM answers everything. ``detections``: code answers an object-count question
+    about a Finnish plan from the detections stored for the drawing, when it has them."""
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Settings:
@@ -44,5 +54,9 @@ class Settings:
             llm_provider=env.get("CHATCHTG_LLM_PROVIDER", "fake"),
             llm_model=env.get("CHATCHTG_LLM_MODEL") or None,
             anthropic_api_key=env.get("CHATCHTG_ANTHROPIC_API_KEY") or None,
+            modal_endpoint=env.get("CHATCHTG_MODAL_ENDPOINT") or None,
+            modal_proxy_token=env.get("CHATCHTG_MODAL_PROXY_TOKEN") or None,
             judge_model=env.get("CHATCHTG_JUDGE_MODEL") or None,
+            room_counter=env.get("CHATCHTG_ROOM_COUNTER", "off"),
+            object_counter=env.get("CHATCHTG_OBJECT_COUNTER", "off"),
         )
