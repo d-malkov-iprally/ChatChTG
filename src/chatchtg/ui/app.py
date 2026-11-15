@@ -160,7 +160,7 @@ def render_header() -> None:
             </svg>
             <span class="brand-name">ChatChTG</span>
           </div>
-          <div class="primary-nav"><span class="active">Analyze</span><span>Documents</span></div>
+          <div class="primary-nav"><span class="active">Analyze</span></div>
         </div>
         """,
         unsafe_allow_html=True,
