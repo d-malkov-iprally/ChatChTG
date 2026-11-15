@@ -119,7 +119,9 @@ def train(
     import rfdetr
 
     from object_detector import dataset as datasets
+    from object_detector.swiss_dataset import check_run_name
 
+    check_run_name(run_name, limit)
     if resolution % 32:
         raise ValueError("The resolution must be a multiple of 32.")
     model_class = getattr(rfdetr, MODEL_CLASSES[size])
@@ -164,7 +166,8 @@ def evaluate(run_name: str, dataset: str = "swiss-v1", limit: int = 0, batch: in
     """Find the objects on every Swiss sheet, choose a threshold per class on the valid
     split, and score the test split with those thresholds.
 
-    Writes to runs/<run_name>/:
+    Writes to runs/<run_name>/, or with ``limit`` to runs/<run_name>/quick/, so that a quick
+    check does not replace the results of the full evaluation:
     - ``detections_all.json``: for each plan, its split, its scale and every detection with a
       score of at least SCORE_FLOOR (class, score, box in PNG pixels);
     - ``scores.json``: the thresholds and the scores of the valid and test splits;
@@ -266,12 +269,14 @@ def evaluate(run_name: str, dataset: str = "swiss-v1", limit: int = 0, batch: in
         print(f"{split} split, counts against the benchmark answers:")
         print(sd.format_plan_scores(result[split]), flush=True)
 
-    (run_dir / "detections_all.json").write_text(json.dumps({
+    out_dir = run_dir / "quick" if limit else run_dir
+    out_dir.mkdir(exist_ok=True)
+    (out_dir / "detections_all.json").write_text(json.dumps({
         "classes": SWISS_CLASSES, "score_floor": SCORE_FLOOR, "thresholds": thresholds,
         "box": "x0, y0, x1, y1 in pixels of the PNG", "plans": detections,
     }))
-    (run_dir / "scores.json").write_text(json.dumps(result, indent=2))
-    samples = run_dir / "samples"
+    (out_dir / "scores.json").write_text(json.dumps(result, indent=2))
+    samples = out_dir / "samples"
     samples.mkdir(exist_ok=True)
     colours = {"door": "red", "window": "blue", "toilet": "green", "washbasin": "magenta",
                "bathtub": "orange", "shower": "cyan", "washing machine": "brown"}

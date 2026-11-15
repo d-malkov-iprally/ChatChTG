@@ -15,6 +15,7 @@ from chatchtg.llm.pricing import cost_usd
 from chatchtg.objects import tune
 from chatchtg.objects.counter import (
     CUBICASA,
+    DEFAULT_SKIP,
     PRODUCER,
     PRODUCER_VERSION,
     SWISS,
@@ -392,7 +393,7 @@ def test_a_swiss_question_is_counted_from_the_swiss_detections_with_their_minimu
             ]
         )
     )
-    counter = DetectorObjectCounter(store)
+    counter = DetectorObjectCounter(store, skip=())
 
     finding = counter.solve("e" * 64, "Wie viele Lavabos sind auf diesem Grundriss eingezeichnet?")
     assert finding.count == 1
@@ -429,7 +430,10 @@ def test_the_skip_setting_reaches_the_app(tmp_path, library):
     request = AnswerRequest(document_id=document.id, message=SWISS_DOORS)
     env = {"CHATCHTG_STATE_DIR": str(tmp_path / "var"), "CHATCHTG_OBJECT_COUNTER": "detections"}
 
-    response = build_answer_service(Settings.from_env(env), library).answer(request)
+    # The Swiss kinds are off unless the setting is given: the LLM answers.
+    assert build_answer_service(Settings.from_env(env), library).answer(request).model == "fake"
+    everything = Settings.from_env({**env, "CHATCHTG_OBJECT_COUNTER_SKIP": ""})
+    response = build_answer_service(everything, library).answer(request)
     assert response.model == OBJECT_COUNTER_MODEL
     assert response.text.startswith("Number of doors")
     skipped = Settings.from_env({**env, "CHATCHTG_OBJECT_COUNTER_SKIP": "swiss:door"})
@@ -534,7 +538,7 @@ def test_report_scores_each_profile_by_split_and_replays_both(tmp_path, capsys):
     ]
     run.write_text("\n".join(json.dumps(r) for r in eval_rows) + "\n")
 
-    replayed = report.replay(run, store, DetectorObjectCounter(store))
+    replayed = report.replay(run, store, DetectorObjectCounter(store, skip=()))
 
     assert (replayed["before"], replayed["after"]) == (2, 3)
     assert [(p, k, s) for _, p, k, s, *_ in replayed["replaced"]] == [
@@ -542,3 +546,12 @@ def test_report_scores_each_profile_by_split_and_replays_both(tmp_path, capsys):
         ("cubicasa", "window", "test"),
     ]
     assert "fixed" in capsys.readouterr().out
+
+
+def test_no_swiss_kind_is_answered_by_default(tmp_path):
+    store = LocalExtractionStore(tmp_path / "metadata")
+    store.put(_swiss(items=[_item("door-1", "door", 0.9), _item("toilet-1", "toilet", 0.9)]))
+    counter = DetectorObjectCounter(store)
+
+    assert DEFAULT_SKIP == {("swiss", kind) for kind in SWISS.classes}
+    assert counter.solve("e" * 64, SWISS_DOORS) is None
