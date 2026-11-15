@@ -9,6 +9,17 @@ run could be made (the Anthropic API returned "credit balance is too low").
 **Result: 90 of 100, against 77 and 81 for the plain model in its two runs. The code part cost
 $0 of LLM.** The gain is inflated by plans that the detectors were trained on; see "Limits".
 
+**With the defaults of `main` it is 88 of 100.** `main` leaves the Swiss object kinds to the
+LLM, because whether a detector trained on the DXF twins may answer is not decided. The 90
+needs `CHATCHTG_OBJECT_COUNTER_SKIP=` (set and empty). Both were run on `main` at 7896267.
+
+| Swiss object kinds | Code answered | Routing | Against run 1 (77) | Against run 2 (81) |
+|---|---|---|---|---|
+| Left to the LLM (default) | 53, 45 right | 88 | fixed 13, broken 2, p = 0.007 | fixed 10, broken 3, p = 0.09 |
+| Answered in code | 67, 58 right | 90 | fixed 15, broken 2, p = 0.002 | fixed 12, broken 3, p = 0.035 |
+
+The tables below are for the Swiss kinds answered in code.
+
 | | Plain Opus 5.5 | Routing | Fixed | Broken | Sign test |
 |---|---|---|---|---|---|
 | Against `baseline-opus-5-5-100` | 77 | 90 | 15 | 2 | p = 0.002 |
@@ -23,7 +34,7 @@ the same in both columns.
 |---|---|
 | Questions | `questions-subset.jsonl`, `--sample 100 --seed 0`, the baseline's 100 questions |
 | Composer | `combined@1+areas@4+room-conventions@3` |
-| Settings | `CHATCHTG_ROOM_COUNTER=confident`, `CHATCHTG_OBJECT_COUNTER=detections` |
+| Settings | `CHATCHTG_ROOM_COUNTER=confident`, `CHATCHTG_OBJECT_COUNTER=detections`, `CHATCHTG_OBJECT_COUNTER_SKIP=` |
 | Code | this branch: `whole-benchmark` (which holds the Swiss object counter) merged with `combined-composer` |
 | LLM | `fake` for the run; the 33 LLM answers from the earlier Opus 5.5 runs with the `baseline@1` context |
 | Scoring | the rule: a count must be exact, an area within 2% |
@@ -47,6 +58,7 @@ Of the 32 area answers, 20 rest on measured rooms, 10 on printed areas and 2 on 
 
 ```sh
 CHATCHTG_LLM_PROVIDER=fake CHATCHTG_ROOM_COUNTER=confident CHATCHTG_OBJECT_COUNTER=detections \
+  CHATCHTG_OBJECT_COUNTER_SKIP= \
   uv run chatchtg eval data/floorplans --questions questions-subset.jsonl --sample 100 --seed 0 \
   --composer combined --evidence --out var/eval-runs/routing-fake-100.jsonl
 uv run python scripts/replay_routing.py var/eval-runs/routing-fake-100.jsonl \
