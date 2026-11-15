@@ -1,7 +1,10 @@
+import os
+
 import pytest
 
 from chatchtg.answering import AnswerService
 from chatchtg.context.baseline import BaselineComposer
+from chatchtg.context.types import Context, TextPart
 from chatchtg.documents.blobs import LocalBlobStore
 from chatchtg.documents.library import DocumentLibrary
 from chatchtg.documents.metadata import SqliteMetadataStore
@@ -11,11 +14,28 @@ PNG = b"\x89PNG\r\n\x1a\n" + b"fake png body"
 JPEG = b"\xff\xd8\xff" + b"fake jpeg body"
 
 
+class EvidenceComposer:
+    """A composer whose context states a code-made answer with one evidence item."""
+
+    name, version = "stub", 1
+
+    def compose(self, request):
+        return Context(
+            system="s", parts=[TextPart(text=request.message)], method="printed",
+            evidence=[{"text": "1.01", "kind": "printed", "value": 8.0, "unit": "m²", "point": [4, 5]}],
+        )
+
+
 @pytest.fixture(autouse=True)
 def no_project_env_file(tmp_path, monkeypatch):
-    """Run each test in an empty folder, so a developer's .env file cannot change it."""
+    """Run each test in an empty folder and without the developer's CHATCHTG_* variables.
+
+    A .env file or a shell that selects the claude provider would otherwise make a test
+    send billed requests.
+    """
     monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("CHATCHTG_ANTHROPIC_API_KEY", raising=False)
+    for name in [name for name in os.environ if name.startswith("CHATCHTG_")]:
+        monkeypatch.delenv(name)
 
 
 @pytest.fixture

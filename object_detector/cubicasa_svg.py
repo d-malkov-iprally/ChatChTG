@@ -147,6 +147,7 @@ def _path_points(d: str) -> list[Point]:
         arity = PATH_ARITY[command.upper()]
         if arity == 0:
             x, y = start
+            command = ""  # a number after Z has no command: the path is not read
             continue
         if index + arity > len(tokens) or any(t.isalpha() for t in tokens[index : index + arity]):
             return []

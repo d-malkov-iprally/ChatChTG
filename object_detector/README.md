@@ -1,6 +1,6 @@
 # object_detector
 
-Training of a detector for the symbols that the floor-plan benchmark counts: window, door, toilet, sink, bathtub, shower and sauna bench. The detector is RF-DETR, fine-tuned on the labels of CubiCasa5K. Training runs on Modal ([ADR 0004](../docs/ADR/0004-modal-for-detector-training.md)).
+Training of a detector for the symbols that the floor-plan benchmark counts: window, door, toilet, sink, bathtub, shower and sauna bench. The detector is RF-DETR, fine-tuned on the labels of CubiCasa5K. Training runs on Modal ([ADR 0005](../docs/ADR/0005-modal-for-detector-training.md)).
 
 ## Licence of the data
 
@@ -13,7 +13,7 @@ uv sync --group train                      # installs the Modal client
 uv run --group train modal setup           # opens a browser to log in to Modal
 ```
 
-A GPU needs a payment method on the Modal account.
+A GPU needs a payment method on the Modal account. Without one, Modal refuses the whole app, also the commands that need no GPU. Set `OBJECT_DETECTOR_GPU=none` to run `download` and `build_dataset` then. The same variable selects the GPU of `train` (default `L40S`; for example `L4` or `A100-40GB`).
 
 To compare the labels and the predictions with the benchmark answers, copy the benchmark questions to the volume (25 MB). Without this step, those comparisons are left out:
 
@@ -36,7 +36,7 @@ uv run --group train modal run -m object_detector.modal_app::evaluate --run-name
 - `download` does nothing if the data is on the volume.
 - `build_dataset` prints the number of boxes of each class, the plans that it skipped, and how often the label counts equal the benchmark answers.
 - `train` has the options `--size` (nano, small, medium, large), `--resolution` (a multiple of 32), `--epochs`, `--batch-size`, `--grad-accum-steps` and `--limit`. With `--limit 200 --epochs 1` it trains on 200 images, as a quick check of the whole pipeline.
-- `train` with the name of a run that was stopped continues that run from its last checkpoint. Modal can stop a GPU container at any time, and it then starts the function again by itself.
+- `train` with the name of a run that was stopped is written to continue that run from its last checkpoint. Modal can stop a GPU container at any time, and it then starts the function again by itself, up to 5 times. **This was not tested**: no run was stopped and continued. If no checkpoint is found, each new start trains from the pretrained weights and is billed again, so watch a run that restarts.
 - `--detach` keeps the run alive when the terminal closes. Read its output with `uv run --group train modal app logs -f chatchtg-object-detector`. Stop it with `uv run --group train modal app stop chatchtg-object-detector`.
 - `evaluate` selects the minimum score that gives the best counts on the validation split, then scores the test split with that value: for each class, on how many plans the count is exactly right, and the mean error of the count.
 
@@ -73,6 +73,12 @@ uv run --group train modal volume get chatchtg-object-detector runs/large-1024/c
 Against the benchmark answers on the same plans: windows 47.5%, doors 71.2%, toilet bowls 81.3%, sinks 76.4%, showers and bathtubs 66.0%.
 
 Window counts are too high as often as too low. Shower counts are almost always too low. The largest errors are on plans with many objects: one plan has 61 labelled windows and 21 found.
+
+## Do not score the detector on the benchmark as it is
+
+The benchmark of this project (`data/floorplans/questions.jsonl`) asks about 4,787 CubiCasa5K plans, and 4,200 of the 5,000 CubiCasa5K plans are the training split of this detector. So most benchmark plans were seen in training. A count accuracy on the whole benchmark, or on `questions-subset.jsonl`, would be inflated and cannot be compared with the baseline ([ADR 0002](../docs/ADR/0002-plain-llm-as-baseline.md)). Score the detector only on the plans of the CubiCasa5K test split, as `evaluate` does. The Swiss Dwellings plans are not in the training data.
+
+The figures of the first run above are in `scores.json` on the Modal volume of the person who ran it. They are not recorded in `docs/benchmarks`.
 
 ## The dataset
 
