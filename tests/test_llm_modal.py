@@ -322,8 +322,9 @@ def test_json_inside_other_text_is_still_read(text):
         "[1, 2]",
     ],
 )
-def test_unreadable_reply_gives_a_digit_free_text(text):
-    completion = _llm(_json_reply(text, finish_reason="length"))[0].complete(LOCATED)
+@pytest.mark.parametrize("finish_reason", ["stop", "length"])  # a whole reply, and one that was cut off
+def test_unreadable_reply_gives_a_digit_free_text(text, finish_reason):
+    completion = _llm(_json_reply(text, finish_reason=finish_reason))[0].complete(LOCATED)
     assert completion.text == UNREADABLE_TEXT
     assert not any(ch.isdigit() for ch in completion.text)
     assert completion.locations is None
