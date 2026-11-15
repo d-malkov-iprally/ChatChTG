@@ -3,10 +3,12 @@
 from chatchtg.context.areas import AreaComposer
 from chatchtg.context.baseline import BaselineComposer
 from chatchtg.context.composer import Composer
+from chatchtg.context.located import LocatedComposer
 from chatchtg.context.room_conventions import RoomConventionsComposer
 
 COMPOSERS: dict[str, Composer] = {
-    c.name: c for c in (BaselineComposer(), AreaComposer(), RoomConventionsComposer())
+    c.name: c
+    for c in (BaselineComposer(), AreaComposer(), RoomConventionsComposer(), LocatedComposer())
 }
 
 

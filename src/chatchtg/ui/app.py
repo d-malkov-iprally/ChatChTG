@@ -255,6 +255,8 @@ def render_workspace(document, library, answer_service) -> None:
                 st.markdown(response.text)
                 st.caption(f"Composer: {response.composer} · Model: {response.model}")
                 st.caption(f"Method: {describe_method(response.method)}")
+                if response.evidence_note:
+                    st.warning(response.evidence_note)
                 if response.evidence:
                     st.table(legend_rows(response.evidence))
                     drawn = [index for index, item in enumerate(response.evidence) if geometry(item) is not None]

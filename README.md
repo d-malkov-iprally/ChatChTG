@@ -175,7 +175,7 @@ CHATCHTG_LLM_PROVIDER=modal uv run chatchtg eval data/preview --sample 20 --max-
 
 The results and the cost assume that the endpoint serves Kimi K3.1 Pro. For an endpoint with another model, set `CHATCHTG_LLM_MODEL` to that model's name and add its price to `llm/pricing.py`. `eval --judge` still uses the Claude judge, so it also needs an Anthropic key.
 
-`--sample N` answers N questions, balanced over source and question type; `--seed` changes the pick. `--max-cost` stops the run before its cost passes that many US dollars. Each result line records the token usage and the cost of its answer. If a run is interrupted, run the same command again with the same `--out` file and `--resume`: it keeps the answers and asks only the remaining questions. `--resume` needs `--out`. With `--evidence`, each result line also has `method` and `evidence` (the items that the app draws on the drawing), so a wrong answer that code made can be inspected later. It is off by default because it makes the result file much larger (about 1 to 3 KB for each area answer); a run resumed with another `--evidence` choice has both kinds of lines. A question whose drawing is missing or not readable is skipped, and the run prints how many it skipped.
+`--sample N` answers N questions, balanced over source and question type; `--seed` changes the pick. `--max-cost` stops the run before its cost passes that many US dollars. Each result line records the token usage and the cost of its answer. If a run is interrupted, run the same command again with the same `--out` file and `--resume`: it keeps the answers and asks only the remaining questions. `--resume` needs `--out`. With `--evidence`, each result line also has `method`, `evidence` (the items that the app draws on the drawing) and `evidence_note` (what a check of the evidence found, or null), so a wrong answer that code made can be inspected later. It is off by default because it makes the result file much larger (about 1 to 3 KB for each area answer); a run resumed with another `--evidence` choice has both kinds of lines. A question whose drawing is missing or not readable is skipped, and the run prints how many it skipped.
 
 Claude needs an Anthropic key, and each request is billed to that key's account. Keep the key in this project:
 
@@ -195,7 +195,7 @@ Set these in the shell or in `.env`:
 |---|---|---|
 | `CHATCHTG_DATA_ROOT` | `data` | root of the downloaded datasets |
 | `CHATCHTG_STATE_DIR` | `var` | where state is written |
-| `CHATCHTG_COMPOSER` | `baseline` | context composer used by the app: `baseline`, `areas` or `room-conventions` |
+| `CHATCHTG_COMPOSER` | `baseline` | context composer used by the app: `baseline`, `areas`, `room-conventions` or `located` |
 | `CHATCHTG_ROOM_COUNTER` | `off` | `confident`: code answers a room-count question when it is as accurate as the LLM; `always`: code answers every room-count question; see [Room counting](#room-counting) |
 | `CHATCHTG_LLM_PROVIDER` | `fake` | LLM adapter: `fake`, `claude` or `modal` |
 | `CHATCHTG_ANTHROPIC_API_KEY` | not set | this project's Anthropic key, used instead of `ANTHROPIC_API_KEY` |
@@ -225,6 +225,27 @@ Almost half of the benchmark questions count rooms: bedrooms, saunas, kitchens, 
   uv run python -m chatchtg.rooms.report data/floorplans var/rooms.jsonl      # accuracy per kind of question
   ```
 
+## Answers that show where they came from
+
+With the `located` composer, a count question also asks the model for the position of each item it counted. The app then draws one green mark for each item on the drawing, so a person can see a miss or a double count without counting again. It is an experiment and not a default. Measured with Kimi K3.1 Pro on 42 count questions against the baseline of the same model: the same number of object counts correct (11 of 23), 4 more room counts correct (18 against 14 of 19), 1.36 times the cost per question, and 74 of 81 reviewed marks on an item of the asked kind ([record](docs/benchmarks/2026-11-15-located-answers.md)).
+
+- **Which questions:** those that start with a counting phrase in English, Finnish, German, French or Italian (`How many`, `Kuinka monta`, `Wie viele`, `Combien`, `Quanti`/`Quante`). Every other question gets the baseline context.
+- **What the response carries:** `evidence` items `{"text": "<label> <n>", "kind": "llm", "point": [x, y]}` in pixels of the stored image, and the method `llm-located`. These are marks that the LLM claimed. Code did not check them against the drawing, and the app says so.
+- **What code checks:** it drops a mark outside the image, and it compares the count that the answer states with the number of marks. A difference, a dropped mark or two marks that are very close together are reported in `evidence_note`, which the app shows as a warning. The answer text and the marks are both kept as the model gave them.
+- **Which provider:** only the `modal` adapter asks for positions. It requests a JSON object (`response_format` with a JSON schema), shows only its `answer` field as the text, and takes the positions as pixels of the file as it was sent. That convention was found by trial for Kimi K3.1 Pro: it is not documented. Use `located` with the `modal` provider only. The `claude` adapter ignores the request, so it returns no marks, but the system prompt of `located` still asks the model to list positions: its plain-text answer can then contain coordinates, which a person would have to read past and which the eval rule can take for the answer. That combination was never run.
+
+```sh
+CHATCHTG_LLM_PROVIDER=modal CHATCHTG_COMPOSER=located uv run chatchtg serve
+CHATCHTG_LLM_PROVIDER=modal uv run chatchtg eval data/floorplans --composer located --evidence \
+  --questions questions-subset.jsonl --sample 100 --max-cost 4 --out var/eval-runs/located.jsonl
+```
+
+To look at the marks of an eval run, draw them on the drawings. The script takes the rows that asked for positions: every N-th of them (`--every`), at most `--limit`, and the rows whose file name is given with `--paths`:
+
+```sh
+uv run python scripts/render_evidence.py var/eval-runs/located.jsonl data/floorplans var/evidence-review --every 3 --limit 20
+```
+
 ## Architecture
 
 One interaction is `(document, message) -> response`, single turn.
@@ -244,11 +265,11 @@ blobs.py   metadata.py
 - **Extraction storage** (`extractions/`): the facts that a producer derived from a drawing (rooms, objects, their geometry and measures), one JSON file per drawing and producer version in `var/metadata/`. The format is in [docs/metadata-format.md](docs/metadata-format.md). Nothing reads or writes it yet.
 - **Room counter** (`rooms/`): optional. `AnswerService` asks it first; when it is not confident, or the question is not a room count, the LLM answers. See [Room counting](#room-counting).
 - **Context composer** (`context/`): a pure function `(document record, bytes, message) -> Context`. It never calls an LLM. To add a strategy, write a composer and list it in `context/registry.py`. A context can carry an answer that code computed and stated (`Context.computed`); `AnswerService` then uses that text and does not call the LLM. The `areas` composer does this, see [Area questions](#area-questions).
-- **LLM** (`llm/`): `LLMClient.complete(Context) -> Completion`. To add a provider, write one adapter and add a branch to `build_llm`.
+- **LLM** (`llm/`): `LLMClient.complete(Context) -> Completion`. To add a provider, write one adapter and add a branch to `build_llm`. A context can ask for the position of each counted item (`Context.locations`); an adapter that supports it returns them in `Completion.locations`, in pixels of the image that was sent, and any other adapter ignores the request.
   - `fake` (`llm/fake.py`): a deterministic stand-in for tests and offline runs.
   - `claude` (`llm/claude.py`): sends the system prompt and one user message (the images and text, in order) to the Anthropic Messages API. The completion records the model that served the request and the token usage. If the model declines a request, the API retries it on a fallback model; if that also declines, the answer says so and the run continues.
-  - `modal` (`llm/modal.py`): sends the system prompt and one user message to a Modal Shared Endpoint through its OpenAI-compatible Chat Completions API. The completion records the model that the endpoint is set to serve and the token usage; reasoning tokens count as output tokens. If the model spends its whole output limit on reasoning, the answer says so and the run continues. A failed request is not sent again.
+  - `modal` (`llm/modal.py`): sends the system prompt and one user message to a Modal Shared Endpoint through its OpenAI-compatible Chat Completions API. The completion records the model that the endpoint is set to serve and the token usage; reasoning tokens count as output tokens. If the model spends its whole output limit on reasoning, the answer says so and the run continues. A failed request is not sent again. For a location request it asks for a JSON object with the answer and the items, and reads both from it; a reply that cannot be read gives an answer that says so.
 - **Judge** (`evals/judge.py`): `Judge.read(question, unit, response) -> Judgement`. It is separate from `LLMClient` because it is not the system that the eval measures.
-- **Evidence** (`evidence.py`): the format of evidence items (where an answer comes from on the drawing), the words for each method, and the function that draws the items on the drawing. The interface calls it.
+- **Evidence** (`evidence.py`): the format of evidence items (where an answer comes from on the drawing), the words for each method, and the function that draws the items on the drawing. The interface calls it. `evidence_check.py` turns the positions of an LLM into evidence items and checks them against the stated count.
 - **Interface** (`ui/app.py`): holds no logic. It shows the answer, how it was made, and its evidence on the drawing. The eval runner calls the same `AnswerService`, not the UI.
-- **Schemas** (`schemas.py`): the request and response of an interaction. Add new fields as optional.
+- **Schemas** (`schemas.py`): the request and response of an interaction, with `method`, `evidence` and `evidence_note` for where the answer comes from. Add new fields as optional.
