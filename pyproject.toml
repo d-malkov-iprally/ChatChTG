@@ -15,7 +15,11 @@ dependencies = [
 chatchtg = "chatchtg.cli:main"
 
 [dependency-groups]
-dev = ["pytest>=8"]
+dev = [
+    "ezdxf>=1.4.5",
+    "pytest>=8",
+    "shapely>=2.2.0",
+]
 # For the training commands of object_detector/. Use it with `uv run --group train modal ...`.
 train = ["modal>=1.1"]
 
