@@ -38,7 +38,8 @@ class Settings:
     about a Finnish or a Swiss plan from the detections stored for the drawing, when it has them."""
     object_counter_skip: str | None = None
     """The kinds that the object counter leaves to the LLM, as ``profile:kind`` separated by
-    commas (``swiss:door,swiss:window``); empty: none. None means ``counter.DEFAULT_SKIP``."""
+    commas (``swiss:door,swiss:window``); empty: none. None means ``counter.DEFAULT_SKIP``,
+    which is every Swiss kind."""
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Settings:

@@ -11,7 +11,7 @@ transform and the boxes in PNG pixels. ``modal_swiss.py`` uploads it with the PN
 cuts the tiles on the volume.
 
 The DXF files are training labels and a reference for scores. The plans of the test split
-are never trained on and never used to choose a threshold (ADR 0003).
+are never trained on and never used to choose a threshold.
 """
 
 from __future__ import annotations
@@ -66,6 +66,23 @@ def site_of(stem: str) -> str:
     if not match:
         raise ValueError(f"Not a Swiss Dwellings plan name: {stem}")
     return match.group(1)
+
+
+def check_run_name(run_name: str, limit: int) -> None:
+    """Refuse a training run whose name would mix a quick check with a full run.
+
+    A training with ``limit`` (a few tiles) writes to the folder of its run name. Under the
+    name of a full run it would replace that run's settings and checkpoints, and a later
+    full training would resume from the checkpoint of the few tiles. So a limited training
+    has a name that ends with ``-quick``, and a full one has not.
+    """
+    if not run_name.startswith("swiss-"):
+        raise ValueError("The name of a Swiss run starts with 'swiss-', to keep it apart from other runs.")
+    if bool(limit) != run_name.endswith("-quick"):
+        raise ValueError(
+            "A training with --limit needs a run name that ends with '-quick', and a full "
+            f"training a name that does not: got {run_name!r} with limit {limit}."
+        )
 
 
 def split_of(stem: str) -> str:
@@ -169,6 +186,10 @@ def join_tiles(found: list[tuple[tuple[int, int], list[dict]]], area, tile: int 
     (``label``, ``score``, ``box`` as x0, y0, x1, y1). A detection is kept by the tile whose
     core holds the centre of its box. The cores of the tiles overlap where a last tile was
     moved back, so overlapping boxes of one class are then reduced to the best one.
+
+    That last step also joins two true objects of one class at the same place. The DXF holds
+    some doors and windows twice at one place, and the benchmark answer counts both: a sheet
+    with such a pair of windows cannot get the exact count of the answer.
     """
     kept = []
     for (x, y), detections in found:
