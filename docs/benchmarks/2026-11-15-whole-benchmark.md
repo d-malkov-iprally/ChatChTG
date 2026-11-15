@@ -13,15 +13,38 @@ is measured, at $0. Every LLM number on the whole benchmark is an estimate from 
 
 - **Code only: 81.2% on the plans that each path was not fitted on (95% interval over plans
   80.2% to 82.2%), at $0 of LLM.** On all plans, fitted ones included, 83.6%. That figure is
-  inflated and is not a result.
+  inflated and is not a result. The 81.2% includes the six Swiss object kinds (8.7% of the
+  benchmark), which the app leaves to the LLM by default (see the corrections below). Without
+  them code answers 18 kinds, 91.3% of the benchmark, at **80.4%** (79.3% to 81.4%).
 - **Plain LLM (Opus 5.5, baseline context), estimate: 72.4%**, at about $0.020 per
   question. 55% of the benchmark is in kinds with fewer than 30 measured questions. With
-  those kinds at the ends of their 95% intervals, the estimate is 59.1% to 84.5%.
-- **Recommended routing, estimate: 86.4%**, at about $0.006 of LLM per question. Code answers
-  object counts, area questions and apartments. The LLM answers Finnish room counts, with the
-  conventions prompt, and Swiss labelled-room counts. With the LLM-answered kinds at the ends
-  of their 95% intervals, the estimate is 84.2% to 87.3%. The routing can be set with
-  existing settings ([below](#the-settings)).
+  those kinds at the ends of their intervals, the estimate is 53.9% to 89.6%. That is a
+  sensitivity range, not a 95% interval.
+- **Routing, estimate, not run: 85.3%** with the app's defaults, at about $0.009 of LLM per
+  question. Code answers Finnish object counts, area questions and apartments. The LLM answers
+  Finnish room counts, with the conventions prompt, Swiss labelled-room counts and Swiss object
+  counts. With the Swiss object kinds answered in code as well, the estimate is 86.4% at
+  about $0.006; that needs a decision that has not been made. The settings are
+  [below](#the-settings).
+
+**Corrections after review, 2026-11-15.**
+
+- **The Swiss object kinds are off by default.** When this page was written they were answered
+  in code whenever the object counter was on, and the page recommended a routing with them in
+  code (86.4%). They are now left to the LLM unless `CHATCHTG_OBJECT_COUNTER_SKIP` is set:
+  the Swiss detector was trained on labels from the DXF twins of the plans, no ADR says
+  whether such a model may answer, and its door counts match the answers by marking boxes
+  that are not visible doors ([Swiss record](2026-11-15-swiss-object-counter.md)). The scorer
+  now follows that setting, and this page gives both variants.
+- **No comparison with the baseline is claimed** ([ADR 0002](../ADR/0002-plain-llm-as-baseline.md)).
+  The code side is measured. The LLM side is a weighted mean of small samples: 55% of its
+  weight rests on 0 to 11 distinct questions per kind. The only measured baselines, 77 and
+  81 of 100 on the baseline sample, are higher than the 72.4% estimate. The routing was never
+  run through `chatchtg eval`. A comparison needs a measured run.
+- **The range of the LLM estimate was too narrow.** It was a Wilson interval over the answers,
+  which are 2 or 3 runs of the same questions (59.1% to 84.5%). Over the distinct questions
+  it is 53.9% to 89.6%.
+- **Swiss labelled rooms are a tie, not a gain** (see the routing section).
 
 Every question is claimed by exactly one path. No question is claimed by two paths, and no
 question is claimed by none.
@@ -117,9 +140,10 @@ estimate, not a measurement:
   kinds (6 to 11). Together they are 54.7% of the benchmark. Swiss doors and showers have no
   answer at all. They get the pooled accuracy of the other Swiss object answers (33 of 42)
   and a range of 0 to 100%.
-- **Range:** with those kinds at the ends of their 95% intervals (Wilson, over answers) and
-  the others at their point estimate, 59.1% to 84.5%. With every kind at the ends of its
-  interval, 55.9% to 85.8%.
+- **Sensitivity range:** with those kinds at the ends of their intervals (Wilson, over the
+  distinct questions) and the others at their point estimate, 53.9% to 89.6%. With every kind
+  at the ends of its interval, 50.3% to 91.0%. All kinds are moved to the same end at once,
+  so this is a worst and a best case and not a 95% interval.
 - The room kinds rest on 52 to 85 answers each, all on `test` plans of the room split. The
   baseline sample of 100 questions is balanced over source and type, not over kinds.
 - The 100-question baseline was 77 of 100 and 81 of 100. Its sample has more area and Swiss
@@ -127,7 +151,14 @@ estimate, not a measurement:
   LLM is weakest in the existing answers, so a lower whole-benchmark score is plausible. With
   2 to 5 questions per object kind, it is not shown.
 
-### Recommended routing: estimate 86.4%
+### Routing: estimate, not run. 85.3% with the defaults, 86.4% with the Swiss object kinds in code
+
+The table and the notes below are as written, for the variant with the Swiss object kinds in
+code (86.4%). With the app's defaults the six Swiss object rows go to the LLM instead, at the
+LLM accuracies of the few existing answers (windows 2 questions, toilets 2, washbasins 4,
+bathtubs 6; doors and showers have none and get the pooled accuracy of the others): the
+estimate is then 85.3% at $0.0087 per question, and 52.4% of the questions are in kinds that
+go to the LLM.
 
 | Kind | Route | Evidence | Accuracy used | LLM cost per question |
 |---|---|---|---|---|
@@ -142,8 +173,12 @@ estimate, not a measurement:
 - **Score: 86.4%** question-weighted, against 81.2% for code only and an estimated 72.4% for
   the plain LLM. **LLM cost: about $0.006 per question** on average, against about $0.020 for
   the plain LLM. 43.7% of the questions go to the LLM.
+- **Swiss labelled rooms are a tie on the same questions.** On the 55 questions that the LLM
+  answered (85 answers, all right), code was right on 55 of 55. The routing takes the LLM
+  there only because code is 96.5% on all held-out questions of the kind. This kind is about
+  40% of the routing's LLM cost. Like the kitchens below, it could go to code.
 - Where the routing differs from code only, the gain rests on comparisons on the same
-  questions, with 70 questions per Finnish room kind and 55 and 44 on Swiss rooms. The routing
+  questions for the Finnish room kinds (70 questions per kind) and the apartments (44). The routing
   takes the LLM only there. Where it takes code, the comparison with the LLM rests on a few
   questions or on none. **This page does not claim that code beats the LLM on those kinds.**
   The code side is measured on hundreds of held-out plans. The LLM side is the open part
@@ -156,7 +191,8 @@ estimate, not a measurement:
   questions where it is not confident.
 - **Range:** with each LLM-answered kind at the ends of its 95% interval (Wilson, 70 or 85
   answers), the estimate is 84.2% to 87.3%. Code-answered kinds are held at their measured
-  accuracy.
+  accuracy. This range leaves out the interval of the code side and the fact that each route
+  was chosen on the same data as it is scored on, which biases the estimate upward.
 - **Kitchens are a tie.** On the same 70 questions code was right on 67 and the conventions
   prompt on 68. With kitchens answered by code, the routing scores 86.3% and saves $0.009 on
   5% of the questions. Code answers 1 there without looking (`usual`), so it shows no evidence.
@@ -171,15 +207,17 @@ The routing needs no new setting:
 CHATCHTG_COMPOSER=combined          # areas composer for area questions, room conventions for Finnish room counts, baseline otherwise
 CHATCHTG_ROOM_COUNTER=confident     # apartments in code when tags and outlines agree; every other room count to the LLM
 CHATCHTG_OBJECT_COUNTER=detections  # the Finnish object kinds in code
-CHATCHTG_OBJECT_COUNTER_SKIP=       # set but empty: the six Swiss object kinds in code too
+# CHATCHTG_OBJECT_COUNTER_SKIP not set: the Swiss object kinds go to the LLM (estimate 85.3%)
+# CHATCHTG_OBJECT_COUNTER_SKIP=      # set but empty: the six Swiss object kinds in code too (estimate 86.4%). Not decided: it needs an ADR
 ```
 
 **The Swiss object kinds are off by default** (`DEFAULT_SKIP` in `objects/counter.py`). The
 Swiss detector was trained on labels from the DXF twins of the plans, and whether such a
 model may answer is not decided: it needs an ADR. Without `CHATCHTG_OBJECT_COUNTER_SKIP=`
 the Swiss object questions (10,758, 8.7% of the benchmark) go to the LLM, and the routing's
-score for them is the LLM's, which is measured on 0 to 6 questions per kind. The routing
-figures on this page are for the routing with the Swiss kinds answered in code.
+score for them is the LLM's, which is measured on 0 to 6 questions per kind: the estimate is
+then 85.3% at $0.0087 of LLM per question. The table and the notes of the routing section
+are for the routing with the Swiss kinds answered in code (86.4%, $0.0057).
 
 The defaults are unchanged. The room counter needs Apple Vision (macOS). Without it,
 apartments go to the LLM, which raises the cost by about $0.0004 per question and leaves the
@@ -195,7 +233,7 @@ per-question costs above. None of these runs was made.
 | Kinds | Run | Approx. cost | What it decides |
 |---|---|---|---|
 | Finnish windows, doors, toilets, sinks, showers+bathtubs | 150 questions per kind on `test` plans of CubiCasa5K | $3 to $4.20 per kind, about $17 | whether the LLM beats 48% to 83%; windows and doors first (the most questions and the lowest code accuracy) |
-| Swiss windows, doors | all 163 `test` plans, each | about $6 per kind | whether to set `CHATCHTG_OBJECT_COUNTER_SKIP=swiss:door,swiss:window` |
+| Swiss windows, doors | all 163 `test` plans, each | about $6 per kind | whether the Swiss door and window counts may be turned on (they are off by default, with the other Swiss kinds), once an ADR allows the Swiss detector to answer |
 | Swiss toilets, washbasins, bathtubs, showers | 100 questions per kind (showers: the 54 test plans) | about $12 | low priority: code is 92.6% to 99.4% |
 | The four area kinds | 150 held-out questions per kind, plain LLM; separately the non-confident questions (about 650 on held-out plans) with the `areas` context | $4 to $7 per kind, about $23; the second run is not costed | the floor area first: the LLM was right on 8 of 8 there, code is 91.6% |
 | Finnish kitchens | 300 questions on `test` plans, conventions prompt | about $2.70 | whether code at $0 is as good |
@@ -232,9 +270,12 @@ uv run python -m chatchtg.evals.code_paths data/floorplans --area-cache var/area
 ```
 
 The last command prints every table of this page except the one about settling runs and the
-cost table. The routing variants (areas in code for all questions, kitchens in code, the
-range) were computed from `var/code-paths.jsonl` with a few lines of Python that are not in
-the repository. Cost: $0, no LLM call.
+cost table. It follows `CHATCHTG_OBJECT_COUNTER_SKIP` as the app does: not set, it prints the
+routing with the Swiss object kinds at the LLM (85.3%); with `CHATCHTG_OBJECT_COUNTER_SKIP=`
+before the command, the routing with them in code (86.4%). The other routing variants (areas
+in code for all questions, kitchens in code, the range of the routing) were computed from
+`var/code-paths.jsonl` with a few lines of Python that are not in the repository. Cost: $0, no
+LLM call.
 
 ## Limits
 
@@ -256,6 +297,13 @@ the repository. Cost: $0, no LLM call.
 - **The routing estimate mixes measured and estimated parts.** Its code parts are measured on
   held-out plans. Its LLM parts are Opus samples of 44 to 85 questions on `test` plans of the
   room split. The non-confident area questions are an estimate.
+- **The area held-out plans include two samples that shaped the confidence rule.** The rule
+  for a gap in the room numbering was chosen on the 100 plans of seed 3, and the update for
+  rooms measured as one region was checked on the 100 plans of seed 0 (186 plans together).
+  They are not in the tuning lists, so they count as held out here. A reviewer took them out:
+  the area kinds moved by at most 0.4 points and the code-only score stayed 81.2%.
+- **The apartment rule may be fitted on test plans too.** The room record says that the count
+  where tags and outlines agree is right on all 1,970 such questions, over all splits.
 - **The conventions prompt was written on sample 1** of the room questions. On sample 2 alone
   its gain was not significant (p = 0.18; [room record](2026-11-14-room-counting.md)).
 - **Weights.** Each kind counts with its number of questions in the benchmark, in both

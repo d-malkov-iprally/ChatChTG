@@ -203,3 +203,14 @@ def test_area_answers_are_read_from_the_cached_analyses_as_the_app_states_them(t
     # A failed analysis answers nothing; a plan that was not analysed is not run.
     assert found[(CH2, one_room)] == Answer(None, "tuned", False)
     assert len(found) == 3
+
+
+def test_the_kinds_that_the_app_leaves_to_the_llm_are_named_as_this_module_names_them():
+    from chatchtg.evals.code_paths import skipped_kinds
+    from chatchtg.objects.counter import DEFAULT_SKIP
+
+    assert skipped_kinds([("swiss", "door"), ("cubicasa", "window")]) == {"swiss:door", "finnish:window"}
+    # By default every Swiss object kind, and no other kind, goes to the LLM.
+    assert skipped_kinds(DEFAULT_SKIP) == {
+        "swiss:window", "swiss:door", "swiss:toilet", "swiss:washbasin", "swiss:bathtub", "swiss:shower"
+    }
