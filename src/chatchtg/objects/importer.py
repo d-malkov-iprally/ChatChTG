@@ -1,13 +1,15 @@
 """Store the detections of a batch prediction as extractions, one file per drawing.
 
-Usage: python -m chatchtg.objects.importer <detections.jsonl> [<images_dir>]
+Usage: python -m chatchtg.objects.importer <detections.jsonl> [<images_dir>] [--version N]
 
 ``detections.jsonl`` is the output of ``object_detector/modal_predict.py``. ``images_dir`` is
 the folder of the benchmark's CubiCasa5K images (default
 ``$CHATCHTG_DATA_ROOT/floorplans/data/cubicasa5k``). A plan whose image is there is stored
 under the hash of that file, and only if the hash is the one that the prediction read; the
 other plans are stored under the hash of the image that the prediction read. The extractions
-go to the extraction store of the settings (``var/metadata``).
+go to the extraction store of the settings (``var/metadata``), as ``--version`` of the
+producer (default: the version that the app reads). The run name and the checkpoint are read
+from ``settings.json`` next to the detections.
 """
 
 from __future__ import annotations
@@ -22,13 +24,15 @@ from typing import Any
 from chatchtg.config import Settings
 from chatchtg.extractions.models import Extraction, ImageSize, Item
 from chatchtg.extractions.store import ExtractionStore
-from chatchtg.objects.counter import PRODUCER, PRODUCER_VERSION
+from chatchtg.objects.counter import PRODUCER, PRODUCER_VERSION, RUN_BY_VERSION
 
 SOURCE_FOLDER = "data/cubicasa5k"
 """The folder of the CubiCasa5K plans in the paths of the benchmark's questions."""
 
 
-def to_extraction(row: dict[str, Any], params: dict[str, Any] | None = None) -> Extraction:
+def to_extraction(
+    row: dict[str, Any], params: dict[str, Any] | None = None, version: int = PRODUCER_VERSION
+) -> Extraction:
     """One line of ``detections.jsonl`` as an extraction."""
     items = []
     per_label: Counter[str] = Counter()
@@ -48,7 +52,7 @@ def to_extraction(row: dict[str, Any], params: dict[str, Any] | None = None) -> 
     return Extraction(
         document_id=row["sha256"],
         producer=PRODUCER,
-        version=PRODUCER_VERSION,
+        version=version,
         image=ImageSize(width=row["width"], height=row["height"]),
         params=params or {},
         source=f"{SOURCE_FOLDER}/{row['image']}",
@@ -77,7 +81,11 @@ def merge_duplicate(extraction: Extraction, row: dict[str, Any]) -> Extraction:
 
 
 def import_detections(
-    detections: Path, images_dir: Path | None, store: ExtractionStore, params: dict[str, Any]
+    detections: Path,
+    images_dir: Path | None,
+    store: ExtractionStore,
+    params: dict[str, Any],
+    version: int = PRODUCER_VERSION,
 ) -> Counter[str]:
     """Store every plan of ``detections``. Returns how many plans went which way."""
     outcome: Counter[str] = Counter()
@@ -97,7 +105,7 @@ def import_detections(
                 outcome["not in the benchmark"] += 1
             known = extractions.get(row["sha256"])
             if known is None:
-                extractions[row["sha256"]] = to_extraction(row, params)
+                extractions[row["sha256"]] = to_extraction(row, params, version)
             else:
                 outcome["same image as another plan"] += 1
                 extractions[row["sha256"]] = merge_duplicate(known, row)
@@ -106,23 +114,55 @@ def import_detections(
     return outcome
 
 
+def run_params(settings: dict[str, Any] | None, version: int) -> dict[str, Any]:
+    """The parameters stored with each extraction of ``version``.
+
+    ``settings`` is the ``settings.json`` that ``predict_all`` wrote next to the detections,
+    or None when there is none. Each version holds the detections of one training run
+    (``RUN_BY_VERSION``). Detections of another run are refused: stored under the wrong
+    version they would replace the detections that the app reads, with the wrong minimum scores.
+    """
+    expected = RUN_BY_VERSION.get(version)
+    if expected is None:
+        raise ValueError(f"No run is named for version {version}: add it to RUN_BY_VERSION")
+    params = dict(settings or {})
+    run = params.setdefault("run_name", expected)
+    if run != expected:
+        raise ValueError(
+            f"These detections are of the run {run!r}, and version {version} holds the run "
+            f"{expected!r}. Pass the --version of that run."
+        )
+    params.setdefault("checkpoint", "checkpoint_best_total.pth")
+    return params
+
+
 def main(argv: list[str]) -> int:
     from chatchtg.wiring import build_extraction_store
 
     settings = Settings.from_env()
+    version = PRODUCER_VERSION
+    if "--version" in argv:
+        at = argv.index("--version")
+        version = int(argv[at + 1])
+        argv = argv[:at] + argv[at + 2 :]
     detections = Path(argv[0])
     if len(argv) > 1:
         images_dir = Path(argv[1])
     else:
         images_dir = settings.data_root / "floorplans" / "data" / "cubicasa5k"
-    params: dict[str, Any] = {"run": "large-1024", "checkpoint": "checkpoint_best_total.pth"}
     settings_file = detections.with_name("settings.json")
-    if settings_file.is_file():
-        params.update(json.loads(settings_file.read_text(encoding="utf-8")))
+    try:
+        params = run_params(
+            json.loads(settings_file.read_text(encoding="utf-8")) if settings_file.is_file() else None,
+            version,
+        )
+    except ValueError as error:
+        print(f"Nothing stored. {error}", file=sys.stderr)
+        return 2
     outcome = import_detections(
-        detections, images_dir if images_dir.is_dir() else None, build_extraction_store(settings), params
+        detections, images_dir if images_dir.is_dir() else None, build_extraction_store(settings), params, version
     )
-    print(", ".join(f"{name}: {n}" for name, n in outcome.items()))
+    print(f"{PRODUCER}@{version}:", ", ".join(f"{name}: {n}" for name, n in outcome.items()))
     return 0
 
 

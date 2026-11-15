@@ -20,7 +20,7 @@ from chatchtg.objects.counter import (
     ObjectFinding,
     count,
 )
-from chatchtg.objects.importer import import_detections, to_extraction
+from chatchtg.objects.importer import import_detections, run_params, to_extraction
 from chatchtg.objects.questions import ObjectQuestion, classify
 from chatchtg.rooms.questions import classify as classify_room
 from chatchtg.rooms.router import Finding
@@ -254,6 +254,42 @@ def test_an_unknown_object_counter_mode_is_refused(library):
         build_answer_service(settings, library)
 
 
+def test_count_uses_the_minimum_scores_of_the_extractions_version(monkeypatch):
+    from chatchtg.objects import counter as counter_module
+
+    monkeypatch.setitem(counter_module.THRESHOLDS_BY_VERSION, 7, {"door": 0.95})
+    door = _item("door-1", "door", 0.9)
+    old = _extraction(items=[door])
+    new = old.model_copy(update={"version": 7})
+
+    assert count(old, ObjectQuestion("door")).count == 1
+    assert count(new, ObjectQuestion("door")).count == 0
+
+
+def test_llm_comparison_counts_each_answer_once_per_file(tmp_path, capsys):
+    from chatchtg.objects import report
+
+    store = LocalExtractionStore(tmp_path / "metadata")
+    store.put(_extraction("d" * 64, [_item("window-1", "window", 0.99)]))
+    row = {
+        "path": "data/cubicasa5k/a.png",
+        "document_id": "d" * 64,
+        "question": "How many windows are shown on this floor plan?",
+        "expected": 1,
+        "correct": False,
+        "model": "claude-opus-5-5",
+    }
+    other = {**row, "model": "fake"}
+    run = tmp_path / "run.jsonl"
+    run.write_text("\n".join(json.dumps(r) for r in (row, row, other)) + "\n")
+
+    report.compare_llm([run], store)
+
+    out = capsys.readouterr().out
+    assert "1 answers on 1 plans" in out
+    assert "window       test      1     0        1     0        0" in out
+
+
 def test_an_answer_of_the_object_counter_has_a_price_of_zero():
     # Without a price, an eval with --max-cost stops at the first answer of the counter.
     assert cost_usd(OBJECT_COUNTER_MODEL, {}) == 0
@@ -268,3 +304,18 @@ def test_detections_that_cannot_be_read_leave_the_question_to_the_llm():
     counter = DetectorObjectCounter(BrokenStore())
 
     assert counter.solve("0" * 64, "How many windows are shown in this floor plan?") is None
+
+
+def test_the_importer_refuses_detections_of_another_run():
+    # Stored as version 1 they would replace the detections that the app reads.
+    with pytest.raises(ValueError, match="large-1536-ft"):
+        run_params({"run_name": "large-1536-ft"}, 1)
+    with pytest.raises(ValueError, match="No run is named"):
+        run_params(None, 99)
+
+
+def test_the_importer_records_the_run_of_its_version():
+    assert run_params({"run_name": "large-1536-ft", "min_score": 0.05}, 2) == {
+        "run_name": "large-1536-ft", "min_score": 0.05, "checkpoint": "checkpoint_best_total.pth",
+    }
+    assert run_params(None, 1)["run_name"] == "large-1024"

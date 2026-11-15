@@ -32,6 +32,8 @@ uv run --group train modal run -m object_detector.modal_app::build_dataset  # la
 uv run --group train modal run --detach -m object_detector.modal_app::train --run-name large-1024
 uv run --group train modal run -m object_detector.modal_app::evaluate --run-name large-1024
 uv run --group train modal run -m object_detector.modal_predict::predict_all --run-name large-1024
+uv run --group train modal run --detach -m object_detector.modal_finetune::finetune --run-name large-1536-ft --resolution 1536 --epochs 10
+uv run python -m object_detector.diagnose <dir with _annotations.coco.json> var/detections/detections.jsonl --lenient
 ```
 
 - `download` does nothing if the data is on the volume.
@@ -40,6 +42,8 @@ uv run --group train modal run -m object_detector.modal_predict::predict_all --r
 - `train` with the name of a run that was stopped is written to continue that run from its last checkpoint. Modal can stop a GPU container at any time, and it then starts the function again by itself, up to 5 times. **This was not tested**: no run was stopped and continued. If no checkpoint is found, each new start trains from the pretrained weights and is billed again, so watch a run that restarts.
 - `--detach` keeps the run alive when the terminal closes. Read its output with `uv run --group train modal app logs -f chatchtg-object-detector`. Stop it with `uv run --group train modal app stop chatchtg-object-detector`.
 - `predict_all` runs a checkpoint of a run over every plan of CubiCasa5K (all 5,000, in the split of CubiCasa5K, also the plans that `build_dataset` skipped) and writes every detection with a score of at least `--min-score` (0.05) to `predictions/<run>/detections.jsonl`, with the split and the SHA-256 of each image. It runs in chunks of 250 plans on L4 GPUs; set `OBJECT_DETECTOR_PREDICT_GPU=A10G` (or `T4`, `L40S`) when L4 has no capacity. `--limit 20` is a quick check. The app counts from these detections: see "Object counting" in the main README.
+- `finetune` (own app `chatchtg-object-finetune`) continues training from the best weights of `--init-run` (default `large-1024`) at another `--resolution` (a multiple of 64) into a new run; the run that it starts from is only read. It is written to resume from its own `last.ckpt` when stopped, and Modal starts it again up to 5 times. **This was not tested**: the one run was never stopped. Without a checkpoint each new start trains from the weights of `--init-run` again and is billed again. `--limit 200 --epochs 1` is a quick check: give it a `--run-name` of its own, because a full run under the same name would resume from the checkpoint of the 200 images. GPU: `OBJECT_DETECTOR_FINETUNE_GPU` (default L40S).
+- `diagnose` needs no GPU: it matches the stored detections of one split to its labels and prints recall and precision per class, why labels were missed and detections were false, the misses by box size at the model input, and the exact counts by the true count. `--overlays <images> <out>` draws the worst plans (labels green, counted detections red, lower scores blue). See `docs/benchmarks/2026-11-15-object-counter.md`.
 - `evaluate` selects the minimum score that gives the best counts on the validation split, then scores the test split with that value: for each class, on how many plans the count is exactly right, and the mean error of the count.
 
 ## Where the results are
@@ -102,5 +106,7 @@ The figures of the first run above are in `scores.json` on the Modal volume of t
 | `scoring.py` | scores of counts against the labels and against the benchmark |
 | `modal_app.py` | the Modal functions |
 | `modal_predict.py` | the batch prediction over all plans, in its own Modal app `chatchtg-object-predict` |
+| `modal_finetune.py` | more training of a finished run at another resolution, in its own Modal app `chatchtg-object-finetune` |
+| `diagnose.py` | box-level analysis of the count errors on one split |
 
 The tests are in `tests/test_object_detector.py`. They need no Modal account and no GPU.

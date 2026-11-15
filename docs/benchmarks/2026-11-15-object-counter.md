@@ -134,5 +134,169 @@ The detections are on the volume under `predictions/large-1024/` (`detections.js
 - The model returns at most 300 detections per image. 149 plans reach that at a score of 0.05,
   but on each of them the lowest kept score is below every chosen minimum, so no counted object
   was cut off.
-- No LLM answer was measured on the test split; the comparison with the LLM is the 18-question
-  replay only.
+- No LLM answer was measured on the test split beyond the 5 test plans of the baseline sample
+  (see the update below).
+
+## Update 2026-11-15 (later): why the counts miss, and a 1536 px model
+
+**Result: the errors come mostly from how multi-pane windows are labelled and from true
+objects that get a low score, not from objects that are too small at the 1024 px input. A
+model fine-tuned at 1536 px is 0.6 points better on valid, which is within noise (about 10 of
+1,750 distinct questions: each is asked in English and in Finnish), so the app keeps
+`large-1024`. On the test split both score 70.8%.**
+
+### Diagnosis (valid split only, no GPU)
+
+`object_detector/diagnose.py` matches the stored detections (score floor 0.05) to the label
+boxes of `datasets/cubicasa-v1/valid` (399 plans) at the counter's minimum scores. A detection
+matches a label at IoU 0.5, or (`--lenient`) when one box lies 70% inside the other: toilets and
+showers are often labelled with a smaller box than the drawn symbol, and for a count that is
+still one object.
+
+Box-level recall and precision at the chosen minimums (lenient matching):
+
+| Class | Labels | Recall | Precision |
+|---|---|---|---|
+| window | 3,375 | 89.2% | 90.8% |
+| door | 3,652 | 92.9% | 97.1% |
+| toilet | 540 | 84.6% | 91.6% |
+| sink | 1,033 | 90.0% | 91.4% |
+| shower | 481 | 67.2% | 80.0% |
+| bathtub | 38 | 13.2% | 100% |
+
+With strict IoU 0.5 the toilet and shower numbers fall to 53%/57% and 44%/52%: most of that gap
+is the box convention, not a counting error.
+
+**Windows** (366 labels missed, 306 false detections):
+
+- Missed: 234 had a box at IoU ≥ 0.5 that scored below the minimum (0.46); 63 only a poorly
+  placed box; 63 nothing at all.
+- False: 140 lie inside a labelled window that another detection already matched (the model
+  splits a window into its panes); 99 are on no label (on the overlays several of them are real
+  windows that the labels leave out); 38 poorly placed; 21 duplicates of a matched window.
+- Size at the 1024 input (shorter side): missed 28% under 6 px (36 labels), 14% of 6 to 10 px,
+  12% of 10 to 20 px, 7.6% at 20 px or more. Small windows are missed more often, but 83% of the
+  missed windows are 10 px or larger.
+- The way a window of several panes is labelled varies: 16.5% of window labels touch another
+  window label in line (one box per pane), on 88 of the 399 plans; on other plans the same kind
+  of window is one box. On plans with per-pane labels the window count is exact on 38% (1 to 7
+  windows) and 36% (8 to 15) of plans; on the other plans on 75% and 61%. A rule that merges
+  touching window detections does not help on valid (233 against 231 exact of 382 plans, worse
+  with a larger gap), because the convention is not the same on all plans.
+- Exact window count by the true count: 1 window 14 of 15, 2 to 3: 59 of 71, 4 to 7: 104 of 166,
+  8 to 15: 48 of 90, 16 or more: 17 of 56. Each window is one more chance of an error.
+- Against the labels of all 399 valid plans: of the 156 plans with a wrong window count, 65 only
+  miss windows, 51 only have extra detections and 40 have both; on 19 more plans misses and
+  extras cancel out.
+
+**Doors** (258 missed, 101 false): 146 missed doors scored below the minimum, 56 were not
+detected, 53 only poorly placed. Doors under 20 px are missed often (80 of 161), but they are
+few; 178 of the 258 missed doors are 20 px or larger. 81 of the 121 plans with a wrong door
+count only miss doors.
+
+**Cause.** Per object the detector is right about 9 times in 10 both ways (recall and precision
+near 90%). Most mistakes are true objects with a middling score and split or unlabelled windows,
+not small objects. The count over 10 or 20 objects then fails often. **What would refute it:**
+if a model that sees more pixels per object lowered the window and door misses a lot and raised
+the exact counts on test, size would be the cause. That was tested next.
+
+The figures of the next paragraph, the labelling of multi-pane windows above, the rule that
+merges touching windows and the fusion of the two models below were made with one-off
+analyses that are not in the repository. No command repeats them.
+
+Two ways to count without a hard minimum were cross-validated on valid (two halves by a hash of
+the image name): rounding the sum of the scores lost on windows (193 against 224 exact of 378),
+doors and sinks and won on toilets (339 against 321); a minimum relative to the plan's top
+scores lost on every class. Neither was adopted. The toilet gain also holds on test (328 against
+318 of 385 plans), but a count that is not the number of the shown boxes is harder to check, so
+it is left as an option, not built. The test figure was looked at once here: a later decision
+to adopt this way of counting must rest on the valid cross-validation alone.
+
+### The 1536 px model
+
+| | |
+|---|---|
+| Run | `runs/large-1536-ft`, own app `chatchtg-object-finetune` (`object_detector/modal_finetune.py`) |
+| Start | the weights of `large-1024/checkpoint_best_total.pth` |
+| Training | 10 epochs at 1536 px, batch 2 × 8 accumulation, lr 5e-5 (encoder 7.5e-5), L40S |
+| Why not more epochs at 1024 | `large-1024` had flattened: validation mAP50 0.69 to 0.71 from epoch 26 to 39 |
+| Validation (EMA), best epoch | mAP50 0.709, mAP50:95 0.490 (large-1024: 0.706 and 0.481) |
+| Minimum scores (valid) | window 0.46, door 0.45, toilet 0.47, sink 0.34, shower 0.25, bathtub 0.95 |
+| Detections | `predictions/large-1536-ft/detections.jsonl` on the volume, `var/detections-1536/`, extraction version `rfdetr-large-1024@2` |
+
+Window misses with 1536 px: 40 of 356 of 6 to 10 px (was 50), 206 of 1,762 of 10 to 20 px (was
+212), 83 of 1,220 at 20 px or more (was 93). They fell at every size, a little.
+
+Exact counts (`objects/report`, `--version 1` and `--version 2`):
+
+| Kind | valid 1024 | valid 1536 | **test 1024** | **test 1536** |
+|---|---|---|---|---|
+| window | 60.6% | 60.8% | **47.9%** | **51.3%** |
+| door | 75.1% | 76.5% | **70.4%** | **70.0%** |
+| toilet | 85.2% | 82.5% | **82.6%** | **81.8%** |
+| sink | 81.2% | 84.5% | **78.7%** | **78.5%** |
+| showers + bathtubs | 79.8% | 80.9% | **74.7%** | **72.3%** |
+| all | 76.4% | 77.0% | **70.8%** | **70.8%** |
+
+The train column rose from 78.6% to 81.1%: the extra epochs fit the training plans better. On
+test, windows gain 3.4 points and the other kinds lose up to 2.4; the total is the same to the
+question. **The decision rests on the valid split**: 0.6 points there is within noise, so the
+model in use is kept and `CHATCHTG_OBJECT_COUNTER=detections` still reads version 1. The test
+figures are given once for both runs as information; they agree with the decision.
+Picking the 1536 model for windows only would be a choice made on the test split, and was not
+done.
+
+Fusing the two models' detections (boxes paired at IoU 0.5, mean score) was no better on valid
+(1,347 exact against 1,348 for 1536 alone) and was not scored on test.
+
+### The LLM on the same questions
+
+Every object-count answer of Opus 5.5 in the existing result files (`var/eval-runs/**/*.jsonl`
+of all worktrees, no new LLM call), against the counter (version 1) on the same question:
+
+| Kind | Split | Answers | LLM right | Counter right | Both | Neither |
+|---|---|---|---|---|---|---|
+| bath_shower | test | 3 | 2 | 0 | 0 | 1 |
+| bath_shower | train | 9 | 7 | 6 | 4 | 0 |
+| door | train | 6 | 0 | 0 | 0 | 6 |
+| sink | test | 3 | 0 | 3 | 0 | 0 |
+| sink | train | 12 | 9 | 9 | 6 | 0 |
+| toilet | test | 3 | 3 | 3 | 3 | 0 |
+| toilet | train | 3 | 0 | 3 | 0 | 0 |
+| window | test | 6 | 3 | 3 | 3 | 3 |
+| window | train | 9 | 0 | 3 | 0 | 6 |
+| all (inflated: 39 of the 54 are on train plans) | | 54 | 24 | 30 | 16 | 16 |
+
+The 54 answers are the same 18 questions on 18 plans, answered in three runs (baseline twice,
+`areas` composer once). 13 of the 18 plans are in the detector's training split, so the "all"
+row favours the counter and is not a result. On the 5 test plans (15 answers, so 5 independent
+cases) the LLM was right 8 times, the counter 9 times. **This does not settle whether the counter should answer instead of the LLM.** That
+needs an Opus run on a few hundred object-count questions of test plans (about $0.03 each).
+
+### Cost
+
+| Step | GPU | Time | Cost (estimate) |
+|---|---|---|---|
+| Check: 1 epoch on 200 images at 1536 | L40S | 1.1 min training, about 3 min container | $0.10 |
+| Fine-tune `large-1536-ft` | L40S | 54.1 min training, about 1 h container | $2.00 |
+| Predict 5,000 plans at 1536 | A10G, 20 containers | 923 s of prediction plus container start | under $0.80 |
+
+About 1.6 GPU-hours, under $3, at Modal's list prices ($1.95 per hour for L40S, $1.10 for A10G);
+not read from the bill. No LLM cost.
+
+### Commands to repeat
+
+```sh
+uv run python -m object_detector.diagnose <valid dir with _annotations.coco.json> var/detections/detections.jsonl --lenient \
+    --overlays data/floorplans/data/cubicasa5k var/overlays
+uv run --group train modal run --detach -m object_detector.modal_finetune::finetune --run-name large-1536-ft --resolution 1536 --epochs 10
+OBJECT_DETECTOR_PREDICT_GPU=A10G uv run --group train modal run -m object_detector.modal_predict::predict_all --run-name large-1536-ft
+uv run --group train modal volume get chatchtg-object-detector predictions/large-1536-ft/detections.jsonl var/detections-1536/
+uv run --group train modal volume get chatchtg-object-detector predictions/large-1536-ft/settings.json var/detections-1536/
+uv run python -m chatchtg.objects.tune data/floorplans/questions.jsonl var/detections-1536/detections.jsonl
+uv run python -m chatchtg.objects.importer var/detections-1536/detections.jsonl data/floorplans/data/cubicasa5k --version 2
+uv run python -m chatchtg.objects.report data/floorplans/questions.jsonl --version 2
+uv run python -m chatchtg.objects.report data/floorplans/questions.jsonl --llm var/eval-runs/*.jsonl var/eval-runs/room-counting/*.jsonl
+```
+
+The valid labels are on the volume: `modal volume get chatchtg-object-detector datasets/cubicasa-v1/valid/_annotations.coco.json <dir>/`.
