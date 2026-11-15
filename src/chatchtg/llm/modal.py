@@ -190,7 +190,9 @@ class ModalLLM:
             raise ModalError(
                 f"Modal answered with status {error.code}: {_http_error_detail(error)}"
             ) from None
-        except (urllib.error.URLError, TimeoutError) as error:
+        # OSError covers URLError, a timeout, and a connection that is reset while the reply
+        # is read, which urllib does not wrap.
+        except OSError as error:
             raise ModalError(f"Modal could not be reached: {error}") from None
         try:
             parsed = json.loads(raw)

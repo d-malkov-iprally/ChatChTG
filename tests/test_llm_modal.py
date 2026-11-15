@@ -399,3 +399,13 @@ def test_an_integer_too_large_for_a_float_is_a_bad_item_and_not_a_crash():
     completion = _llm(_json_reply(text))[0].complete(LOCATED)
     assert completion.text == "2 doors"
     assert completion.locations == [Location(label="door", point=(7, 8))]
+
+
+def test_connection_that_the_endpoint_resets_is_reported_as_a_modal_error(monkeypatch):
+    def urlopen(request, timeout, context):
+        raise ConnectionResetError(54, "Connection reset by peer")
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+
+    with pytest.raises(ModalError, match="could not be reached"):
+        build_llm("modal", api_key=TOKEN, modal_endpoint=ENDPOINT).complete(CONTEXT)
