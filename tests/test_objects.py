@@ -251,3 +251,39 @@ def test_an_unknown_object_counter_mode_is_refused(library):
     settings = Settings.from_env({"CHATCHTG_OBJECT_COUNTER": "yes"})
     with pytest.raises(ValueError, match="object counter"):
         build_answer_service(settings, library)
+
+
+def test_count_uses_the_minimum_scores_of_the_extractions_version(monkeypatch):
+    from chatchtg.objects import counter as counter_module
+
+    monkeypatch.setitem(counter_module.THRESHOLDS_BY_VERSION, 7, {"door": 0.95})
+    door = _item("door-1", "door", 0.9)
+    old = _extraction(items=[door])
+    new = old.model_copy(update={"version": 7})
+
+    assert count(old, ObjectQuestion("door")).count == 1
+    assert count(new, ObjectQuestion("door")).count == 0
+
+
+def test_llm_comparison_counts_each_answer_once_per_file(tmp_path, capsys):
+    from chatchtg.objects import report
+
+    store = LocalExtractionStore(tmp_path / "metadata")
+    store.put(_extraction("d" * 64, [_item("window-1", "window", 0.99)]))
+    row = {
+        "path": "data/cubicasa5k/a.png",
+        "document_id": "d" * 64,
+        "question": "How many windows are shown on this floor plan?",
+        "expected": 1,
+        "correct": False,
+        "model": "claude-opus-5-5",
+    }
+    other = {**row, "model": "fake"}
+    run = tmp_path / "run.jsonl"
+    run.write_text("\n".join(json.dumps(r) for r in (row, row, other)) + "\n")
+
+    report.compare_llm([run], store)
+
+    out = capsys.readouterr().out
+    assert "1 answers on 1 plans" in out
+    assert "window       test      1     0        1     0        0" in out

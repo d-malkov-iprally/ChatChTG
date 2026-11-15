@@ -11,24 +11,42 @@ from chatchtg.extractions.store import ExtractionStore
 from chatchtg.objects.questions import ObjectQuestion, classify
 
 PRODUCER = "rfdetr-large-1024"
-"""The producer name of the detections of the ``large-1024`` run of ``object_detector``."""
-PRODUCER_VERSION = 1
+"""The producer name of the detections of the RF-DETR detector of ``object_detector``.
+Version 1 is the run ``large-1024``. The name stayed when later runs became new versions."""
 
 Thresholds = Mapping[str, float]
 """Detector class -> the minimum score of a detection that is counted."""
 
+# Detector class -> minimum score, for each producer version (each is another model).
 # Chosen on the valid split of CubiCasa5K only, to give the most exact counts there
 # (`python -m chatchtg.objects.tune`, docs/benchmarks/2026-11-15-object-counter.md).
-THRESHOLDS: dict[str, float] = {
-    "window": 0.46,
-    "door": 0.53,
-    "toilet": 0.48,
-    "sink": 0.34,
-    "shower": 0.35,
-    # Bathtubs are rare (38 on the valid plans) and most bathtub detections there were wrong,
-    # so nearly only the surest are counted.
-    "bathtub": 0.9,
+THRESHOLDS_BY_VERSION: dict[int, dict[str, float]] = {
+    # Run large-1024.
+    1: {
+        "window": 0.46,
+        "door": 0.53,
+        "toilet": 0.48,
+        "sink": 0.34,
+        "shower": 0.35,
+        # Bathtubs are rare (38 on the valid plans) and most bathtub detections there were
+        # wrong, so nearly only the surest are counted.
+        "bathtub": 0.9,
+    },
+    # Run large-1536-ft: large-1024 trained 10 more epochs at 1536 px. Not used by the app:
+    # it was no better on the test split (docs/benchmarks/2026-11-15-object-counter.md).
+    # Kept so that `report --version 2` can repeat that measurement.
+    2: {
+        "window": 0.46,
+        "door": 0.45,
+        "toilet": 0.47,
+        "sink": 0.34,
+        "shower": 0.25,
+        "bathtub": 0.95,
+    },
 }
+PRODUCER_VERSION = 1
+"""The version that the app reads."""
+THRESHOLDS = THRESHOLDS_BY_VERSION[PRODUCER_VERSION]
 
 
 @dataclass
@@ -53,9 +71,12 @@ def counted(extraction: Extraction, classes: tuple[str, ...], thresholds: Thresh
 
 
 def count(
-    extraction: Extraction, question: ObjectQuestion, thresholds: Thresholds = THRESHOLDS
+    extraction: Extraction, question: ObjectQuestion, thresholds: Thresholds | None = None
 ) -> ObjectFinding:
-    """Answer ``question`` from the detections of one drawing."""
+    """Answer ``question`` from the detections of one drawing. Without ``thresholds``, the
+    minimum scores of the extraction's producer version."""
+    if thresholds is None:
+        thresholds = THRESHOLDS_BY_VERSION[extraction.version]
     items = counted(extraction, question.classes, thresholds)
     evidence = [
         {
@@ -79,7 +100,7 @@ class DetectorObjectCounter:
         store: ExtractionStore,
         producer: str = PRODUCER,
         version: int | None = PRODUCER_VERSION,
-        thresholds: Thresholds = THRESHOLDS,
+        thresholds: Thresholds | None = None,
     ) -> None:
         self._store = store
         self._producer = producer

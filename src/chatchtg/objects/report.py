@@ -1,7 +1,8 @@
 """Score the object counter on the benchmark, from the stored detections. No LLM call.
 
 Usage:
-    python -m chatchtg.objects.report <questions.jsonl> [--replay <eval-run.jsonl> ...]
+    python -m chatchtg.objects.report <questions.jsonl> [--replay <eval-run.jsonl> ...] [--llm <eval-run.jsonl> ...]
+        [--version N]
 
 The first table is the exact-count accuracy of every CubiCasa5K object-count question of
 the benchmark, per kind and per split of CubiCasa5K. The detector was trained on the train
@@ -11,6 +12,10 @@ plans that neither saw.
 ``--replay`` takes the rows of an eval run (``chatchtg eval``), replaces the answer of each
 question that the counter answers by the counter's answer, and prints the score before
 and after, with the split of each replaced plan.
+
+``--llm`` takes any eval result files, keeps every object-count answer of Opus on a plan with
+stored detections, and counts per kind and split where the LLM, the counter, both or neither
+were right.
 """
 
 from __future__ import annotations
@@ -23,7 +28,8 @@ from pathlib import Path
 from chatchtg.config import Settings
 from chatchtg.extractions.models import Extraction
 from chatchtg.extractions.store import ExtractionStore
-from chatchtg.objects.counter import PRODUCER, PRODUCER_VERSION, count
+from chatchtg.objects import counter
+from chatchtg.objects.counter import PRODUCER, count
 from chatchtg.objects.questions import KINDS, classify
 
 SPLITS = ("train", "valid", "test")
@@ -40,7 +46,7 @@ def split_of(extraction: Extraction, path: str) -> str:
 def by_source(store: ExtractionStore) -> dict[str, Extraction]:
     """Benchmark path (``data/cubicasa5k/<image>``) -> the stored detections of that plan."""
     found = {}
-    for extraction in store.iter(PRODUCER, PRODUCER_VERSION):
+    for extraction in store.iter(PRODUCER, counter.PRODUCER_VERSION):
         folder = (extraction.source or "").rsplit("/", 1)[0]
         for image in extraction.attributes.get("cubicasa_splits", {}):
             found[f"{folder}/{image}"] = extraction
@@ -119,7 +125,7 @@ def replay(run_file: Path, store: ExtractionStore) -> None:
         question = classify(row["question"])
         extraction = None
         if question is not None:
-            extraction = store.get(row["document_id"], PRODUCER, PRODUCER_VERSION)
+            extraction = store.get(row["document_id"], PRODUCER, counter.PRODUCER_VERSION)
         ok = bool(row.get("correct"))
         before += ok
         if extraction is None:
@@ -146,15 +152,73 @@ def replay(run_file: Path, store: ExtractionStore) -> None:
     print("  replaced plans per split:", dict(by_split))
 
 
+def compare_llm(files: list[Path], store: ExtractionStore, model_prefix: str = "claude-opus") -> None:
+    """Every object-count answer of an LLM in ``files`` against the counter on the same plan."""
+    cells: dict[tuple[str, str], Counter[str]] = defaultdict(Counter)
+    seen: set[tuple[str, str, str]] = set()
+    plans: set[str] = set()
+    for path in files:
+        for line in path.open(encoding="utf-8"):
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            if not str(row.get("model", "")).startswith(model_prefix) or "document_id" not in row:
+                continue
+            question = classify(row["question"])
+            if question is None:
+                continue
+            extraction = store.get(row["document_id"], PRODUCER, counter.PRODUCER_VERSION)
+            if extraction is None:
+                continue
+            key = (path.name, row["path"], row["question"])
+            if key in seen:
+                continue
+            seen.add(key)
+            plans.add(row["path"])
+            llm_ok = bool(row.get("correct"))
+            counter_ok = count(extraction, question).count == row["expected"]
+            cell = cells[(question.kind, split_of(extraction, row["path"]))]
+            cell["n"] += 1
+            cell["llm"] += llm_ok
+            cell["counter"] += counter_ok
+            cell["both"] += llm_ok and counter_ok
+            cell["neither"] += not llm_ok and not counter_ok
+    print(f"\nLLM ({model_prefix}*) answers against the counter on the same questions: "
+          f"{len(seen)} answers on {len(plans)} plans, from {len(files)} files")
+    print(f"  {'kind':<13}{'split':<7}{'n':>4}{'llm':>6}{'counter':>9}{'both':>6}{'neither':>9}")
+    total: Counter[str] = Counter()
+    for (kind, split), cell in sorted(cells.items()):
+        total.update(cell)
+        print(f"  {kind:<13}{split:<7}{cell['n']:>4}{cell['llm']:>6}{cell['counter']:>9}"
+              f"{cell['both']:>6}{cell['neither']:>9}")
+    print(f"  {'ALL':<20}{total['n']:>4}{total['llm']:>6}{total['counter']:>9}"
+          f"{total['both']:>6}{total['neither']:>9}")
+
+
+def _option(argv: list[str], name: str) -> list[Path]:
+    """The file arguments after ``name``, up to the next option."""
+    if name not in argv:
+        return []
+    rest = argv[argv.index(name) + 1 :]
+    stop = next((i for i, a in enumerate(rest) if a.startswith("--")), len(rest))
+    return [Path(a) for a in rest[:stop]]
+
+
 def main(argv: list[str]) -> int:
     from chatchtg.wiring import build_extraction_store
 
     store = build_extraction_store(Settings.from_env())
+    if "--version" in argv:
+        # Score another stored version than the one that the app reads.
+        counter.PRODUCER_VERSION = int(argv[argv.index("--version") + 1])
+    print(f"Detections: {PRODUCER}@{counter.PRODUCER_VERSION}")
     questions = Path(argv[0])
-    runs = [Path(name) for name in argv[1:] if name != "--replay"]
     print_benchmark(score_benchmark(questions, by_source(store)))
-    for run_file in runs:
+    for run_file in _option(argv, "--replay"):
         replay(run_file, store)
+    llm_files = _option(argv, "--llm")
+    if llm_files:
+        compare_llm(llm_files, store)
     return 0
 
 
