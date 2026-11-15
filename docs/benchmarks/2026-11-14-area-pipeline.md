@@ -117,9 +117,10 @@ three changes:
 
 ## Limits
 
-- **The answer was scored, not the LLM's sentence.** The composer hands the LLM the result
-  and asks it to state it. A run through `chatchtg eval --composer areas` with a real model
-  has not been made.
+- **The answer was scored, not the LLM's sentence.** At the time of this run the composer
+  handed the LLM the result and asked it to state it. This no longer applies: since
+  2026-11-15 code states the result and the text itself is scored, see
+  [the update below](#update-of-2026-11-15-the-result-is-stated-in-code).
 - **Tuned to this renderer.** The grey levels, line widths, red outline and grey outdoor fill
   are constants of the synthetic Swiss plans. The measurer was tuned on 40 plans and the label
   reader on 40 others; the 100 plans above exclude the first 40 but may include some of the
@@ -152,10 +153,108 @@ No question changed from right to wrong in code. On `site10161_bldg14756_floor39
 this sample) the apartment total went from 68.14 m² to 57.70 m², against a reference of 57.87.
 No LLM run was repeated for this update.
 
+## Update of 2026-11-15: the result is stated in code
+
+**When the pipeline is confident, code now writes the answer and no LLM is called
+(`areas@3`, model `area-pipeline`). On the 32 such questions of the baseline sample the
+text is correct 30 times at $0, against 27 times at $0.141 when Opus 5.5 stated the same
+results.**
+
+Before, the composer gave the LLM the result as text and asked it to state it. The eval rule
+reads the last number of an answer, and the LLM's sentence did not always end with the
+result. The text that code writes names the rooms that were added up, says for each whether
+its area was printed or measured, adds a caution for a measured answer at 1:200 or coarser
+and for a total on a plan with a gap in the numbering, and always ends with
+`Answer: <value> m²`.
+
+### Run A: the baseline's area questions
+
+The 33 area questions of `--sample 100 --seed 0`. 32 of them get an answer from the pipeline;
+the other one (`site1125_bldg2268_floor10441`, printed areas and a gap in the numbering)
+goes to the LLM with the image and was not answered in this run.
+
+| The same 32 questions | Correct by the rule | Cost |
+|---|---|---|
+| Stated by the LLM (`areas@2`, Opus 5.5, `fix-issues-areas-opus-5-5-100.jsonl`) | 27 | $0.141 |
+| Stated in code (`areas@3`, no LLM) | 30 | $0 |
+| The pipeline's own unrounded value | 30 | $0 |
+
+9 of the 32 answers rest on printed areas (9 correct) and 23 on measured ones (21 correct).
+The two wrong answers are wrong in both runs: the measured value is off by more than 2%.
+The three answers that the LLM's sentence lost had the right number in the text, but not as
+the last number:
+
+- "…beträgt insgesamt **338.17 m²**. Zwei Werte (2.12 Bad und 2.25 Lift) sind aus der
+  Zeichnung gemessen…": read as 2.25.
+- "The tool reports a net floor area of **3.01 m²** for room 4.39 (Bad).": read as 4.39.
+- "…is **112.63 m²**. (The rounded room areas listed add up to 112.62 m². The 0.01 m²
+  difference…": read as 0.01.
+
+No answer was correct in the LLM-stated run and wrong in the code-stated one.
+
+### Run B: all area questions of the subset
+
+All 500 questions of `questions-subset.jsonl`; 167 are area questions, each on another plan.
+
+| | Questions |
+|---|---|
+| Stated in code | 157 of 167 (94%) |
+| of those, correct by the rule on the text | 141 (89.8%) |
+| of those, correct by the pipeline's own value | 141 |
+| Not answered in this run (go to the LLM with the image and the room table) | 10 |
+
+By how the areas were obtained: printed 29 of 29 correct, measured 112 of 128. In both runs
+every stated text ends with the total rounded to two decimals, and no answer is wrong by the
+rule while its value is right.
+
+### Cost
+
+- **$0.0044 saved for each stated question**: the 32 calls of the `areas@2` run cost $0.141
+  (about 430 input and 134 output tokens each, Opus 5.5). A stated question now costs $0 of
+  LLM, against $0.038 for an area question of the baseline.
+- No network round trip for these answers. The CPU cost of the OCR is unchanged. Run A took
+  6.5 minutes and run B 29 minutes of wall time on a laptop that other jobs were using.
+
+### Commands
+
+```sh
+CHATCHTG_LLM_PROVIDER=fake uv run chatchtg eval data/floorplans --questions questions-subset.jsonl \
+  --sample 100 --seed 0 --composer areas --max-cost 0.01 --out var/eval-runs/areas-stated-fake-100.jsonl
+uv run python scripts/eval_area_statement.py --results var/eval-runs/areas-stated-fake-100.jsonl \
+  --compare var/eval-runs/fix-issues-areas-opus-5-5-100.jsonl
+
+CHATCHTG_LLM_PROVIDER=fake uv run chatchtg eval data/floorplans --questions questions-subset.jsonl \
+  --composer areas --max-cost 0.01 --out var/eval-runs/areas-stated-fake-500.jsonl
+uv run python scripts/eval_area_statement.py --results var/eval-runs/areas-stated-fake-500.jsonl
+```
+
+Ignore the accuracy that `chatchtg eval` prints for these runs: the count questions and the
+area questions that go to the LLM were answered by the fake LLM.
+
+### Limits
+
+- **No run with a real model was made for this update.** The `areas@2` figures come from one
+  run of a model that is not deterministic; another run could lose more or fewer sentences.
+  With 32 questions, 30 against 27 is not a finding about accuracy by itself. The finding is
+  that the code-made text scores exactly as the pipeline's value does, at no cost.
+- **The questions that go to the LLM were not answered in these runs** (1 of 33 and 10 of
+  167). Their context did not change, so their accuracy is unchanged, and it is not measured
+  here. A total over all area questions needs a run with a real model.
+- **Two decimals.** The text gives the total with two decimals, as the plans and the
+  reference answers do. In rare cases the rounding moves an answer across the 2% line: in a
+  replay of 1,028 answers on 100 plans the unrounded value was right 936 times and the
+  rounded one 934 times (one quantity, asked in two languages). In runs A and B it changed
+  no answer. The LLM was given the rounded value too, so this is not a change.
+- **The text is English** for a question in any language; the room names are as printed on
+  the plan.
+- **A room number that was read twice** is described by its reading that has an area. This
+  correction was made after the two runs; no row of either run has such a room.
+
 ## Update of 2026-11-15: measuring on 1:200 plans
 
-Two changes to the room measurer (`areas/measure.py`, composer `areas@3`), both taken from a
-diagnosis of the wrong rooms on the tuning plans:
+Two changes to the room measurer (`areas/measure.py`, composer `areas@4`), both taken from a
+diagnosis of the wrong rooms on the tuning plans. The figures of the update above (`areas@3`,
+the result stated in code) were made with the measurer before these changes.
 
 - **A cut-off fixture is joined to its room.** The inside of a bathtub or a kitchen counter
   was left out of the room when its outline was too wide to join across (the double outline

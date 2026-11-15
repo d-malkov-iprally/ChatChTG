@@ -10,7 +10,7 @@ from chatchtg.rooms import geometry, lexicon
 from chatchtg.rooms.questions import RoomQuestion, classify
 from chatchtg.rooms.router import Finding, decide
 from chatchtg.schemas import AnswerRequest
-from conftest import PNG
+from conftest import PNG, EvidenceComposer
 
 
 @pytest.mark.parametrize(
@@ -155,6 +155,16 @@ def test_confident_room_count_is_answered_without_the_llm(library):
     assert trace.response.method == "labels"
     assert trace.response.evidence[0] == {"text": "MH", "box": [1, 2, 3, 4]}
     assert score("count", 2, trace.response.text) is True
+
+
+def test_the_room_counter_wins_over_the_evidence_of_the_composer(library):
+    document = library.add_upload(PNG, "plan.png")
+    service = AnswerService(library, EvidenceComposer(), FakeLLM(reply="7"), FixedCounter(finding(True)))
+
+    response = service.answer(AnswerRequest(document_id=document.id, message="How many bedrooms?"))
+
+    assert response.method == "labels"
+    assert response.evidence == finding(True).evidence
 
 
 def test_unsure_room_count_goes_to_the_llm_unless_trusted(library):
