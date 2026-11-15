@@ -33,7 +33,9 @@ def test_app_answers_a_question_about_a_registered_document(tmp_path, monkeypatc
     app = AppTest.from_file(APP).run()
     assert not app.exception
 
-    app.radio[0].set_value("Registered document").run()
+    app.segmented_control[0].set_value("Registered document").run()
+    assert any("AI Assistant" in block.value for block in app.markdown)
+    assert any("Drawing ready" in block.value for block in app.markdown)
     app.text_area[1].set_value("How many doors?")
     app.button[1].click().run()
 
@@ -52,7 +54,7 @@ def test_app_reports_a_document_whose_file_is_gone(tmp_path, monkeypatch):
     (data_root / "plan.png").unlink()
 
     app = AppTest.from_file(APP).run()
-    app.radio[0].set_value("Registered document").run()
+    app.segmented_control[0].set_value("Registered document").run()
 
     assert not app.exception
     assert len(app.error) == 1 and "cannot be shown" in app.error[0].value
@@ -65,7 +67,7 @@ def real_png(size=(400, 300)):
 
 
 def ask(app, message):
-    app.radio[0].set_value("Registered document").run()
+    app.segmented_control[0].set_value("Registered document").run()
     app.text_area[1].set_value(message)
     app.button[1].click().run()
     return app
@@ -144,7 +146,8 @@ def test_app_shows_the_plain_drawing_when_the_evidence_cannot_be_drawn(tmp_path,
 
     assert not app.exception and not app.error
     assert any("could not be drawn" in block.value for block in app.warning)
-    assert [caption for image in app.image for caption in image.captions] == ["plan.png"]
+    captions = [caption for image in app.image for caption in image.captions]
+    assert len(app.image) == 1 and not any("Evidence on" in caption for caption in captions)
     assert app.table and app.expander                     # the rest of the page is still there
 
 
@@ -157,7 +160,18 @@ def test_app_shows_the_question_with_the_answer(tmp_path, monkeypatch):
     app.text_area[1].set_value("   ")                     # an empty question is not asked
     app.button[1].click().run()
 
-    assert any(block.value == "Question: How many doors?" for block in app.caption)
+    assert any('class="assistant-question">How many doors?<' in block.value for block in app.markdown)
+
+
+def test_app_keeps_the_upload_when_the_document_control_is_cleared(tmp_path, monkeypatch):
+    monkeypatch.setenv("CHATCHTG_DATA_ROOT", str(tmp_path / "data"))
+    monkeypatch.setenv("CHATCHTG_STATE_DIR", str(tmp_path / "state"))
+
+    app = AppTest.from_file(APP).run()
+    app.segmented_control[0].set_value(None).run()         # a click on the selected option
+
+    assert not app.exception and not app.info             # not the list of registered documents
+    assert any("Open a construction drawing" in block.value for block in app.markdown)
 
 
 def test_app_draws_the_marks_of_the_llm_and_warns_when_the_count_differs(tmp_path, monkeypatch):

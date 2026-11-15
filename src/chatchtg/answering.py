@@ -24,6 +24,8 @@ logger = logging.getLogger(__name__)
 
 ROOM_COUNTER_MODEL = "room-counter"
 """The model name of an answer that code made without an LLM call."""
+AREA_PIPELINE_MODEL = "area-pipeline"
+"""The model name of an area answer that code computed and stated without an LLM call."""
 
 
 class RoomCounter(Protocol):
@@ -75,7 +77,7 @@ class AnswerService:
             completion = Completion(text=_finding_text(finding), model=ROOM_COUNTER_MODEL)
         else:
             finding = None
-            completion = self._llm.complete(context)
+            completion = self._state(context)
         # The evidence of one producer, in this order: the room counter when its count is the
         # answer; what the composer knows about a result that the context states; the positions
         # that the LLM gave for the items it counted; none.
@@ -104,6 +106,18 @@ class AnswerService:
             evidence_note=note,
         )
         return AnswerTrace(response=response, context=context, completion=completion)
+
+    def _state(self, context: Context) -> Completion:
+        """The answer text for a context: the statement that code wrote, when the context
+        carries one, and the LLM's completion otherwise.
+
+        Only the areas composer writes a statement today, so the model name is the area
+        pipeline's. A second composer that states answers needs its own name.
+        """
+        computed = context.computed
+        if computed is not None and computed.statement:
+            return Completion(text=computed.statement, model=AREA_PIPELINE_MODEL)
+        return self._llm.complete(context)
 
 
 def _llm_evidence(context: Context, completion: Completion) -> CheckedEvidence | None:

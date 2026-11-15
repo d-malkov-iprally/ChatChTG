@@ -42,6 +42,19 @@ class LocationRequest(BaseModel):
     shape: Literal["point"] = "point"
 
 
+class ComputedAnswer(BaseModel):
+    """An answer that code computed. No LLM adapter reads it."""
+
+    value: float
+    unit: str = "m2"
+    basis: Literal["printed", "measured"]
+    """How the value was obtained. "measured" when any part of it was measured."""
+    doubts: list[str] = []
+    """Reasons to doubt the value that cost nothing to know, as short codes."""
+    statement: str | None = None
+    """The finished answer text. With it, the answer service asks no LLM."""
+
+
 class Context(BaseModel):
     system: str
     parts: list[TextPart | ImagePart]
@@ -53,6 +66,7 @@ class Context(BaseModel):
     """Read by the LLM adapters. None: a plain text reply. Set: the adapter also asks for the
     position of each counted item and returns them in ``Completion.locations``. An adapter
     that cannot do that ignores the request. Set it only where the LLM decides the answer."""
+    computed: ComputedAnswer | None = None
 
     def summary(self) -> dict[str, Any]:
         """A JSON-safe description for logs and eval results. Images become their hash."""
@@ -72,4 +86,7 @@ class Context(BaseModel):
         summary: dict[str, Any] = {"system": self.system, "parts": parts}
         if self.locations is not None:
             summary["locations"] = self.locations.model_dump()
+        if self.computed is not None:
+            # Without the statement: it is the response text of the same eval row.
+            summary["computed"] = self.computed.model_dump(exclude={"statement"})
         return summary
