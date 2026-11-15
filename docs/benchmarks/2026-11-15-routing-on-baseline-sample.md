@@ -52,6 +52,41 @@ With the defaults of `main`: 88; fixed 13, broken 2 (p = 0.007) and fixed 10, br
 "Fixed" and "broken" count only the 67 questions that code answered. The 33 other answers are
 the same in both columns.
 
+## A fresh run with Kimi K3.1 Pro on Modal
+
+The replay above takes the LLM answers from earlier runs. This run asks a real model: the same
+100 questions, the code of `main` with its defaults (Swiss object kinds left to the LLM), and
+Kimi K3.1 Pro on a Modal Shared Endpoint for the 47 questions that go to the LLM.
+
+**Result: 88 of 100 for $1.30.** Every answer was made in this run.
+
+| Path | Questions | Right | Cost |
+|---|---|---|---|
+| Area pipeline | 32 | 32 | $0 |
+| Object counter, Finnish plans | 18 | 10 | $0 |
+| Room counter (Swiss apartments) | 3 | 3 | $0 |
+| Kimi K3.1 Pro | 47 | 43 | $1.30 |
+| All | 100 | 88 | $1.30 |
+
+Against the earlier runs of the same model on the same questions:
+
+| Earlier run | Questions in both | Earlier | Routing | Fixed | Broken | Sign test | Cost, earlier and routing |
+|---|---|---|---|---|---|---|---|
+| `baseline@1` (stopped at its cost limit after 63 questions) | 63 | 39 | 54 | 16 | 1 | p = 0.0003 | $2.76, $0.46 |
+| `combined` composer, no counters | 100 | 81 | 88 | 11 | 4 | p = 0.12 | $2.63, $1.30 |
+
+```sh
+CHATCHTG_LLM_PROVIDER=modal CHATCHTG_ROOM_COUNTER=confident CHATCHTG_OBJECT_COUNTER=detections \
+  uv run chatchtg eval data/floorplans --questions questions-subset.jsonl --sample 100 --seed 0 \
+  --composer combined --max-cost 3 --out var/eval-runs/routing-kimi-k3-1-pro-modal-100.jsonl
+```
+
+- Kimi is a cheaper and weaker model than Opus 5.5, so this is not the Opus score of the
+  routing. No Opus run could be made.
+- The limits below hold here too: 13 of the 18 Finnish plans that the object counter answered
+  are plans its detector was trained on, and the area constants are fitted to this renderer.
+- One run. The gain over the `combined` run without counters is not proven by it.
+
 ## Setup
 
 | | |
