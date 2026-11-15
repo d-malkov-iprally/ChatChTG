@@ -274,6 +274,20 @@ uv run python -m chatchtg.objects.report data/floorplans/questions.jsonl --profi
 
 Each detector run is its own version of the producer `rfdetr-large-1024`, with its own minimum scores (`THRESHOLDS_BY_VERSION`); `PRODUCER_VERSION` in `objects/counter.py` is the one the app reads. `importer --version N` stores a run as version N and `report --version N` scores it. The importer refuses detections whose `settings.json` names another run than the one of that version (`RUN_BY_VERSION`), so a forgotten `--version` cannot replace the detections that the app reads. Version 1 is `large-1024`, the one in use; version 2 (`large-1536-ft`) was kept out: its gain on the valid split is within noise. The Swiss detections are the producer `rfdetr-swiss`, version 1 = run `swiss-medium-1280`; their file names no run, so `importer --profile swiss` refuses a file whose minimum scores are not those of the version. Without `--profile`, `report` scores both profiles and the replay replaces the answers of both.
 
+## The whole benchmark in code
+
+Every one of the 123,098 benchmark questions is claimed by exactly one code path: the area pipeline, the room counter or the object counter (Finnish or Swiss). `chatchtg.evals.code_paths` takes each path's stored answers, scores them with the eval rule, and reports per kind of question the accuracy on the plans that the path was not fitted on, the code-only score of the whole benchmark with an interval from a bootstrap over plans, the Opus answers in existing eval runs, and the score of a routing between code and the LLM. No LLM call. Result and routing: [docs/benchmarks/2026-11-15-whole-benchmark.md](docs/benchmarks/2026-11-15-whole-benchmark.md).
+
+```sh
+uv run python scripts/eval_areas.py --stems <all Swiss stems> --out var/areas-all.jsonl   # fills var/area-cache
+uv run python -m chatchtg.rooms.bench data/floorplans var/ocr-cache var/rooms.jsonl     # macOS (Apple Vision)
+uv run python -m chatchtg.evals.code_paths data/floorplans --area-cache var/area-cache --rooms var/rooms.jsonl \
+    --area-tuned docs/benchmarks/stems/tune-100.txt docs/benchmarks/stems/tune-200.txt docs/benchmarks/stems/label-dev.txt \
+    --llm var/eval-runs/*.jsonl var/eval-runs/room-counting/*.jsonl --out var/code-paths.jsonl
+```
+
+The object answers are counted from the detections in `var/metadata` (see [Object counting](#object-counting)).
+
 ## Answers that show where they came from
 
 With the `located` composer, a count question also asks the model for the position of each item it counted. The app then draws one green mark for each item on the drawing, so a person can see a miss or a double count without counting again. It is an experiment and not a default. Measured with Kimi K3.1 Pro on 42 count questions against the baseline of the same model: the same number of object counts correct (11 of 23), 4 more room counts correct (18 against 14 of 19), 1.36 times the cost per question, and 74 of 81 reviewed marks on an item of the asked kind ([record](docs/benchmarks/2026-11-15-located-answers.md)).
