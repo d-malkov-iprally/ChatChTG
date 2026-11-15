@@ -2,7 +2,7 @@
 
     uv run python -m chatchtg.evals.code_paths data/floorplans \\
         --area-cache var/area-cache --rooms var/rooms.jsonl \\
-        --area-tuned docs/benchmarks/stems/tune-100.txt docs/benchmarks/stems/tune-200.txt var/label-dev-stems.txt \\
+        --area-tuned docs/benchmarks/stems/tune-100.txt docs/benchmarks/stems/tune-200.txt docs/benchmarks/stems/label-dev.txt \\
         --llm <eval-run.jsonl> ... --out var/code-paths.jsonl
 
 Four code paths answer questions without an LLM. Each claims a set of questions by their
@@ -29,7 +29,13 @@ its path, and ``held_out`` is True only on plans that the path was not fitted on
 The report gives, per kind of question, the accuracy on the held-out plans (the number to
 quote) and on all plans (inflated), the code-only score of the whole benchmark with an interval
 from a bootstrap over plans, and, with ``--llm``, the Opus answers in existing eval-run files
-per kind, the estimated plain-LLM score and the score of the routing in ``ROUTING``.
+per kind, the estimated plain-LLM score and the estimated score of the routing in ``ROUTING``.
+The routing was never run: its LLM parts are estimates from small samples.
+
+The object kinds that the app leaves to the LLM (``CHATCHTG_OBJECT_COUNTER_SKIP``, by default
+every Swiss kind: see ``objects.counter.DEFAULT_SKIP``) are scored in the code columns all
+the same, because the table is about what the code path can do. The routing sends them to
+the LLM, as the app does, and the code-only score is also given without them.
 """
 
 from __future__ import annotations
@@ -49,7 +55,7 @@ from typing import Any
 from chatchtg.areas.questions import parse_question
 from chatchtg.evals.scoring import score_value
 from chatchtg.objects import questions as object_questions
-from chatchtg.objects.counter import PROFILES
+from chatchtg.objects.counter import DEFAULT_SKIP, PROFILES, parse_skip
 from chatchtg.rooms import questions as room_questions
 
 DATASETS = {"cubicasa5k": "finnish", "swiss_dwellings": "swiss"}
@@ -394,6 +400,17 @@ def read_runs(files: Iterable[Path]) -> tuple[list[dict], list[Path]]:
 SAME = "measured on the same questions"
 HANDFUL = "LLM side a handful of questions"
 NONE = "LLM not measured; chosen by reasoning"
+SKIPPED = "left to the LLM by the object counter's setting"
+PROFILE_OF_DATASET = {"finnish": "cubicasa", "swiss": "swiss"}
+
+
+def skipped_kinds(skip: Iterable[tuple[str, str]]) -> set[str]:
+    """The kinds of this module (``swiss:door``) for the (profile, kind) pairs that the
+    object counter leaves to the LLM."""
+    dataset_of_profile = {profile: dataset for dataset, profile in PROFILE_OF_DATASET.items()}
+    return {f"{dataset_of_profile[profile]}:{kind}" for profile, kind in skip}
+
+
 ROUTING: dict[str, tuple[str, str]] = {
     "finnish:window": ("code", HANDFUL),
     "finnish:door": ("code", HANDFUL),
@@ -505,9 +522,13 @@ def _pct(hits: int, n: int) -> str:
 
 
 def report(
-    scored: list[Scored], benchmark: Counter, tallies: dict[tuple[str, str], LlmTally] | None
+    scored: list[Scored],
+    benchmark: Counter,
+    tallies: dict[tuple[str, str], LlmTally] | None,
+    skip: Iterable[tuple[str, str]] = (),
 ) -> dict[str, Any]:
     summary = summarise(scored, benchmark)
+    off = skipped_kinds(skip) & set(KINDS)
     print("\n## Code paths per kind\n")
     print("| Kind | Benchmark | Answered | Held-out plans | Held-out questions | Held-out accuracy | All plans (inflated) |")
     print("|---|---|---|---|---|---|---|")
@@ -522,6 +543,14 @@ def report(
           f"(95% interval over plans {low:.1%} to {high:.1%})")
     print(f"Code-only score on all plans (inflated, not a result): {inflated:.1%}")
     result: dict[str, Any] = {"code_only": (point, low, high), "summary": summary}
+    if off:
+        on = {k: w for k, w in weights.items() if k not in off}
+        point_on, low_on, high_on = bootstrap([r for r in scored if r.kind not in off], on)
+        share = sum(on.values()) / sum(weights.values())
+        print(f"Object kinds that the app leaves to the LLM: {', '.join(sorted(off))}")
+        print(f"Code-only score without them, held-out plans ({len(on)} kinds, {share:.1%} of the "
+              f"benchmark): {point_on:.1%} (95% interval over plans {low_on:.1%} to {high_on:.1%})")
+        result["code_only_on"] = (point_on, low_on, high_on)
     for name, rows in (("rooms", [r for r in scored if r.path == "rooms"]),
                        ("areas", [r for r in scored if r.path == "areas"])):
         sure = [r for r in rows if r.held_out and r.confident]
@@ -541,7 +570,7 @@ def report(
             print(f"| {name} | {prompt} | {t.answers} | {len(t.questions)} | {t.correct} | "
                   f"{_pct(t.correct, t.answers)} | {lo:.0%} to {hi:.0%} | ${t.cost / t.answers:.4f} |")
     result["llm"] = llm_estimate(tallies, weights)
-    result["routing"] = routing_estimate(scored, summary, tallies, weights)
+    result["routing"] = routing_estimate(scored, summary, tallies, weights, off)
     return result
 
 
@@ -568,8 +597,11 @@ def _plain_accuracy(tallies, kind: str, weights: Mapping[str, int]) -> tuple[flo
         hits = sum(v.correct for v in pooled)
         total = sum(v.answers for v in pooled)
         return (hits / total if total else 0.5), 0.0, 1.0, True
-    lo, hi = wilson(t.correct, t.answers)
-    return t.correct / t.answers, lo, hi, len(t.questions) < FEW
+    # The answers are repeated runs of the same questions, so the interval is taken over the
+    # distinct questions: over the answers it would be too narrow.
+    distinct = len(t.questions)
+    lo, hi = wilson(round(t.correct / t.answers * distinct), distinct)
+    return t.correct / t.answers, lo, hi, distinct < FEW
 
 
 def llm_estimate(tallies, weights: Mapping[str, int]) -> dict[str, Any]:
@@ -593,8 +625,10 @@ def llm_estimate(tallies, weights: Mapping[str, int]) -> dict[str, Any]:
     print(f"\nPlain-LLM estimate (Opus 5.5, baseline context), question-weighted: {estimate:.1%}")
     print(f"  uncertain kinds (< {FEW} distinct questions measured), {share:.1%} of the benchmark: "
           + ", ".join(uncertain))
-    print(f"  uncertain kinds at the ends of their 95% intervals: {lo_range:.1%} to {hi_range:.1%}")
-    print(f"  every kind at the ends of its 95% interval: {lo_all:.1%} to {hi_all:.1%}")
+    print("  sensitivity (not a 95% interval: all kinds at the same end at once; intervals are "
+          "Wilson over distinct questions):")
+    print(f"  uncertain kinds at the ends of their intervals: {lo_range:.1%} to {hi_range:.1%}")
+    print(f"  every kind at the ends of its interval: {lo_all:.1%} to {hi_all:.1%}")
     return {"estimate": estimate, "range": (lo_range, hi_range), "range_all": (lo_all, hi_all),
             "uncertain": uncertain, "point": point}
 
@@ -607,8 +641,12 @@ def _best_llm(tallies, kind: str) -> tuple[float, LlmTally | None, str]:
     return float("nan"), None, "not measured"
 
 
-def routing_estimate(scored, summary, tallies, weights: Mapping[str, int]) -> dict[str, Any]:
-    """The estimated score and LLM cost per question of ROUTING."""
+def routing_estimate(
+    scored, summary, tallies, weights: Mapping[str, int], off: Iterable[str] = ()
+) -> dict[str, Any]:
+    """The estimated score and LLM cost per question of ROUTING. The kinds in ``off`` go to
+    the LLM whatever ROUTING says: the app leaves them to it."""
+    off = set(off)
     print("\n## Routing\n")
     print("| Kind | Code, held-out | Best Opus (prompt, answers) | Code on the same questions | Route | Evidence "
           "| Estimated accuracy | LLM cost per question |")
@@ -631,6 +669,8 @@ def routing_estimate(scored, summary, tallies, weights: Mapping[str, int]) -> di
         if math.isnan(best):
             best = _plain_accuracy(tallies, kind, weights)[0]
         route, evidence = ROUTING[kind]
+        if kind in off:
+            route, evidence = "llm", SKIPPED
         if route == "code":
             accuracy[kind], cost[kind] = code, 0.0
         elif route == "llm":
@@ -654,7 +694,9 @@ def routing_estimate(scored, summary, tallies, weights: Mapping[str, int]) -> di
               f"| {accuracy[kind]:.1%} | ${cost[kind]:.4f} |")
     score = weighted_score(accuracy, weights)
     mean_cost = weighted_score(cost, weights)
-    print(f"\nRouting estimate: {score:.1%}, LLM cost ${mean_cost:.4f} per question on average")
+    to_llm = sum(w for k, w in weights.items() if cost[k] > 0 and (k in off or ROUTING[k][0] == "llm"))
+    print(f"\nRouting estimate (not run): {score:.1%}, LLM cost ${mean_cost:.4f} per question on average; "
+          f"{to_llm / sum(weights.values()):.1%} of the questions are in kinds that go to the LLM whole")
     return {"score": score, "cost": mean_cost, "accuracy": accuracy, "cost_by_kind": cost}
 
 
@@ -666,6 +708,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--area-tuned", type=Path, nargs="*", default=[], help="files of plan stems the area pipeline was tuned on")
     parser.add_argument("--llm", type=Path, nargs="*", default=[], help="eval-run files with Opus answers")
     parser.add_argument("--out", type=Path, help="write one row per scored question")
+    parser.add_argument("--partial", action="store_true",
+                        help="score although some claimed questions have no stored answer (the scores then leave them out)")
     args = parser.parse_args(argv)
 
     from chatchtg.config import Settings
@@ -676,7 +720,10 @@ def main(argv: list[str] | None = None) -> int:
     tuned: set[str] = set()
     for path in args.area_tuned:
         tuned.update(path.read_text().split())
-    answers = load_object_answers(questions, build_extraction_store(Settings.from_env()))
+    settings = Settings.from_env()
+    # As the app decides it (wiring.build_answer_service).
+    skip = DEFAULT_SKIP if settings.object_counter_skip is None else parse_skip(settings.object_counter_skip)
+    answers = load_object_answers(questions, build_extraction_store(settings))
     answers["rooms"] = load_room_answers(dataset_dir, args.rooms)
     answers["areas"] = load_area_answers(questions, args.area_cache, tuned)
     for name, found in answers.items():
@@ -695,6 +742,10 @@ def main(argv: list[str] | None = None) -> int:
     missing_plans = {row["path"] for row, _ in not_run}
     print(f"Claimed but without a stored answer (not run): {len(not_run):,} questions on {len(missing_plans):,} plans "
           + (str(dict(missing)) if missing else ""))
+    if not_run and not args.partial:
+        print("Not scored: a score that leaves these questions out would look like a score of the whole "
+              "benchmark. Fill the caches, or pass --partial.", file=sys.stderr)
+        return 1
     area_plans = {r.plan for r in scored if r.path == "areas"}
     held_area_plans = {r.plan for r in scored if r.path == "areas" and r.held_out}
     print(f"Area pipeline answers on {len(area_plans):,} plans, {len(held_area_plans):,} of them held out")
@@ -707,7 +758,7 @@ def main(argv: list[str] | None = None) -> int:
         rows, used = read_runs(args.llm)
         print(f"LLM rows: {len(rows):,} from {len(used)} distinct files")
         tallies = tally_llm(rows)
-    report(scored, benchmark, tallies)
+    report(scored, benchmark, tallies, skip)
     return 0
 
 
