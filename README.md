@@ -124,6 +124,16 @@ The script counts only the rows with the model `area-pipeline`. In a run with th
 
 `eval_measure.py` takes the label positions from the DXF truth, so every error it reports is an error of the measurer; `--compare OLD.jsonl` lists the rooms that changed against an earlier run. The lists in [docs/benchmarks/stems](docs/benchmarks/stems/) split the plans of each scale into the 20 the measurer was tuned on and the rest. `eval_areas.py` keeps each analysis in `var/area-cache` by the plan name: pass `--refresh` after a change to the pipeline. Both scripts read the plans from `CHATCHTG_DATA_ROOT`.
 
+To measure what a cross-check of measured areas against an LLM would change, without building it (the result is in [docs/benchmarks/2026-11-15-area-cross-check.md](docs/benchmarks/2026-11-15-area-cross-check.md)):
+
+```sh
+uv run python scripts/eval_area_check.py signals    # the pipeline's value for every area question, and whether the check would be made; no LLM call
+uv run python scripts/eval_area_check.py select     # one such question per plan, into <state dir>/area-check/questions.jsonl
+uv run python scripts/eval_area_check.py replay --results <a baseline eval run on those questions>   # what the check would change
+```
+
+The script reads `CHATCHTG_DATA_ROOT` and `CHATCHTG_STATE_DIR` and writes under `<state dir>/area-check/` (`var/area-check/` by default). `signals` keeps the analysis of each plan there: pass `--refresh` after a change to the pipeline. The eval run between `select` and `replay` is an ordinary `chatchtg eval ... --composer baseline` with the absolute path of the question file as `--questions`; with a real provider it is billed.
+
 The DXF files are used only to score and to explain errors, never to answer ([ADR 0003](docs/ADR/0003-floor-plans-only.md)). Results are in [docs/benchmarks](docs/benchmarks/).
 
 ### Judge
