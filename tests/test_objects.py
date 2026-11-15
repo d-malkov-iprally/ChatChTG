@@ -20,7 +20,7 @@ from chatchtg.objects.counter import (
     ObjectFinding,
     count,
 )
-from chatchtg.objects.importer import import_detections, to_extraction
+from chatchtg.objects.importer import import_detections, run_params, to_extraction
 from chatchtg.objects.questions import ObjectQuestion, classify
 from chatchtg.rooms.questions import classify as classify_room
 from chatchtg.rooms.router import Finding
@@ -304,3 +304,18 @@ def test_detections_that_cannot_be_read_leave_the_question_to_the_llm():
     counter = DetectorObjectCounter(BrokenStore())
 
     assert counter.solve("0" * 64, "How many windows are shown in this floor plan?") is None
+
+
+def test_the_importer_refuses_detections_of_another_run():
+    # Stored as version 1 they would replace the detections that the app reads.
+    with pytest.raises(ValueError, match="large-1536-ft"):
+        run_params({"run_name": "large-1536-ft"}, 1)
+    with pytest.raises(ValueError, match="No run is named"):
+        run_params(None, 99)
+
+
+def test_the_importer_records_the_run_of_its_version():
+    assert run_params({"run_name": "large-1536-ft", "min_score": 0.05}, 2) == {
+        "run_name": "large-1536-ft", "min_score": 0.05, "checkpoint": "checkpoint_best_total.pth",
+    }
+    assert run_params(None, 1)["run_name"] == "large-1024"

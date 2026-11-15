@@ -45,6 +45,8 @@ THRESHOLDS_BY_VERSION: dict[int, dict[str, float]] = {
         "bathtub": 0.95,
     },
 }
+RUN_BY_VERSION = {1: "large-1024", 2: "large-1536-ft"}
+"""The training run whose detections each producer version holds."""
 PRODUCER_VERSION = 1
 """The version that the app reads."""
 THRESHOLDS = THRESHOLDS_BY_VERSION[PRODUCER_VERSION]
@@ -77,6 +79,11 @@ def count(
     """Answer ``question`` from the detections of one drawing. Without ``thresholds``, the
     minimum scores of the extraction's producer version."""
     if thresholds is None:
+        if extraction.version not in THRESHOLDS_BY_VERSION:
+            raise ValueError(
+                f"No minimum scores for {extraction.producer}@{extraction.version}: "
+                "add them to THRESHOLDS_BY_VERSION"
+            )
         thresholds = THRESHOLDS_BY_VERSION[extraction.version]
     items = counted(extraction, question.classes, thresholds)
     evidence = [

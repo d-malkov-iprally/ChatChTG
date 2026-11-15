@@ -141,8 +141,9 @@ The detections are on the volume under `predictions/large-1024/` (`detections.js
 
 **Result: the errors come mostly from how multi-pane windows are labelled and from true
 objects that get a low score, not from objects that are too small at the 1024 px input. A
-model fine-tuned at 1536 px is 0.6 points better on valid and exactly as good on the test split
-(70.8%), so the app keeps `large-1024`.**
+model fine-tuned at 1536 px is 0.6 points better on valid, which is within noise (about 10 of
+1,750 distinct questions: each is asked in English and in Finnish), so the app keeps
+`large-1024`. On the test split both score 70.8%.**
 
 ### Diagnosis (valid split only, no GPU)
 
@@ -199,12 +200,17 @@ not small objects. The count over 10 or 20 objects then fails often. **What woul
 if a model that sees more pixels per object lowered the window and door misses a lot and raised
 the exact counts on test, size would be the cause. That was tested next.
 
+The figures of the next paragraph, the labelling of multi-pane windows above, the rule that
+merges touching windows and the fusion of the two models below were made with one-off
+analyses that are not in the repository. No command repeats them.
+
 Two ways to count without a hard minimum were cross-validated on valid (two halves by a hash of
 the image name): rounding the sum of the scores lost on windows (193 against 224 exact of 378),
 doors and sinks and won on toilets (339 against 321); a minimum relative to the plan's top
 scores lost on every class. Neither was adopted. The toilet gain also holds on test (328 against
 318 of 385 plans), but a count that is not the number of the shown boxes is harder to check, so
-it is left as an option, not built.
+it is left as an option, not built. The test figure was looked at once here: a later decision
+to adopt this way of counting must rest on the valid cross-validation alone.
 
 ### The 1536 px model
 
@@ -218,7 +224,7 @@ it is left as an option, not built.
 | Minimum scores (valid) | window 0.46, door 0.45, toilet 0.47, sink 0.34, shower 0.25, bathtub 0.95 |
 | Detections | `predictions/large-1536-ft/detections.jsonl` on the volume, `var/detections-1536/`, extraction version `rfdetr-large-1024@2` |
 
-Window misses with 1536 px: 40 of 356 under 10 px (was 50), 206 of 1,762 of 10 to 20 px (was
+Window misses with 1536 px: 40 of 356 of 6 to 10 px (was 50), 206 of 1,762 of 10 to 20 px (was
 212), 83 of 1,220 at 20 px or more (was 93). They fell at every size, a little.
 
 Exact counts (`objects/report`, `--version 1` and `--version 2`):
@@ -234,7 +240,9 @@ Exact counts (`objects/report`, `--version 1` and `--version 2`):
 
 The train column rose from 78.6% to 81.1%: the extra epochs fit the training plans better. On
 test, windows gain 3.4 points and the other kinds lose up to 2.4; the total is the same to the
-question. **This is not a gain**, so `CHATCHTG_OBJECT_COUNTER=detections` still reads version 1.
+question. **The decision rests on the valid split**: 0.6 points there is within noise, so the
+model in use is kept and `CHATCHTG_OBJECT_COUNTER=detections` still reads version 1. The test
+figures are given once for both runs as information; they agree with the decision.
 Picking the 1536 model for windows only would be a choice made on the test split, and was not
 done.
 
@@ -257,11 +265,12 @@ of all worktrees, no new LLM call), against the counter (version 1) on the same 
 | toilet | train | 3 | 0 | 3 | 0 | 0 |
 | window | test | 6 | 3 | 3 | 3 | 3 |
 | window | train | 9 | 0 | 3 | 0 | 6 |
-| all | | 54 | 24 | 30 | 16 | 16 |
+| all (inflated: 39 of the 54 are on train plans) | | 54 | 24 | 30 | 16 | 16 |
 
 The 54 answers are the same 18 questions on 18 plans, answered in three runs (baseline twice,
-`areas` composer once). On the 5 test plans (15 answers) the LLM was right 8 times, the counter
-9 times. **This does not settle whether the counter should answer instead of the LLM.** That
+`areas` composer once). 13 of the 18 plans are in the detector's training split, so the "all"
+row favours the counter and is not a result. On the 5 test plans (15 answers, so 5 independent
+cases) the LLM was right 8 times, the counter 9 times. **This does not settle whether the counter should answer instead of the LLM.** That
 needs an Opus run on a few hundred object-count questions of test plans (about $0.03 each).
 
 ### Cost

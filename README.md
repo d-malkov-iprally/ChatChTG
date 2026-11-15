@@ -264,7 +264,7 @@ uv run python -m chatchtg.objects.report data/floorplans/questions.jsonl --repla
 uv run python -m chatchtg.objects.report data/floorplans/questions.jsonl --llm var/eval-runs/*.jsonl
 ```
 
-Each detector run is its own version of the producer `rfdetr-large-1024`, with its own minimum scores (`THRESHOLDS_BY_VERSION`); `PRODUCER_VERSION` in `objects/counter.py` is the one the app reads. `importer --version N` stores a run as version N and `report --version N` scores it. Version 1 is `large-1024`, the one in use; version 2 (`large-1536-ft`) was no better on the test split.
+Each detector run is its own version of the producer `rfdetr-large-1024`, with its own minimum scores (`THRESHOLDS_BY_VERSION`); `PRODUCER_VERSION` in `objects/counter.py` is the one the app reads. `importer --version N` stores a run as version N and `report --version N` scores it. The importer refuses detections whose `settings.json` names another run than the one of that version (`RUN_BY_VERSION`), so a forgotten `--version` cannot replace the detections that the app reads. Version 1 is `large-1024`, the one in use; version 2 (`large-1536-ft`) was kept out: its gain on the valid split is within noise.
 
 ## Answers that show where they came from
 

@@ -24,7 +24,7 @@ from typing import Any
 from chatchtg.config import Settings
 from chatchtg.extractions.models import Extraction, ImageSize, Item
 from chatchtg.extractions.store import ExtractionStore
-from chatchtg.objects.counter import PRODUCER, PRODUCER_VERSION
+from chatchtg.objects.counter import PRODUCER, PRODUCER_VERSION, RUN_BY_VERSION
 
 SOURCE_FOLDER = "data/cubicasa5k"
 """The folder of the CubiCasa5K plans in the paths of the benchmark's questions."""
@@ -114,6 +114,28 @@ def import_detections(
     return outcome
 
 
+def run_params(settings: dict[str, Any] | None, version: int) -> dict[str, Any]:
+    """The parameters stored with each extraction of ``version``.
+
+    ``settings`` is the ``settings.json`` that ``predict_all`` wrote next to the detections,
+    or None when there is none. Each version holds the detections of one training run
+    (``RUN_BY_VERSION``). Detections of another run are refused: stored under the wrong
+    version they would replace the detections that the app reads, with the wrong minimum scores.
+    """
+    expected = RUN_BY_VERSION.get(version)
+    if expected is None:
+        raise ValueError(f"No run is named for version {version}: add it to RUN_BY_VERSION")
+    params = dict(settings or {})
+    run = params.setdefault("run_name", expected)
+    if run != expected:
+        raise ValueError(
+            f"These detections are of the run {run!r}, and version {version} holds the run "
+            f"{expected!r}. Pass the --version of that run."
+        )
+    params.setdefault("checkpoint", "checkpoint_best_total.pth")
+    return params
+
+
 def main(argv: list[str]) -> int:
     from chatchtg.wiring import build_extraction_store
 
@@ -128,10 +150,15 @@ def main(argv: list[str]) -> int:
         images_dir = Path(argv[1])
     else:
         images_dir = settings.data_root / "floorplans" / "data" / "cubicasa5k"
-    params: dict[str, Any] = {"run": "large-1024", "checkpoint": "checkpoint_best_total.pth"}
     settings_file = detections.with_name("settings.json")
-    if settings_file.is_file():
-        params.update(json.loads(settings_file.read_text(encoding="utf-8")))
+    try:
+        params = run_params(
+            json.loads(settings_file.read_text(encoding="utf-8")) if settings_file.is_file() else None,
+            version,
+        )
+    except ValueError as error:
+        print(f"Nothing stored. {error}", file=sys.stderr)
+        return 2
     outcome = import_detections(
         detections, images_dir if images_dir.is_dir() else None, build_extraction_store(settings), params, version
     )
