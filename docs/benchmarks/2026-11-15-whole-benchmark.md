@@ -170,9 +170,16 @@ The routing needs no new setting:
 ```sh
 CHATCHTG_COMPOSER=combined          # areas composer for area questions, room conventions for Finnish room counts, baseline otherwise
 CHATCHTG_ROOM_COUNTER=confident     # apartments in code when tags and outlines agree; every other room count to the LLM
-CHATCHTG_OBJECT_COUNTER=detections  # every object kind of both detectors in code
-# CHATCHTG_OBJECT_COUNTER_SKIP not set: DEFAULT_SKIP is empty
+CHATCHTG_OBJECT_COUNTER=detections  # the Finnish object kinds in code
+CHATCHTG_OBJECT_COUNTER_SKIP=       # set but empty: the six Swiss object kinds in code too
 ```
+
+**The Swiss object kinds are off by default** (`DEFAULT_SKIP` in `objects/counter.py`). The
+Swiss detector was trained on labels from the DXF twins of the plans, and whether such a
+model may answer is not decided: it needs an ADR. Without `CHATCHTG_OBJECT_COUNTER_SKIP=`
+the Swiss object questions (10,758, 8.7% of the benchmark) go to the LLM, and the routing's
+score for them is the LLM's, which is measured on 0 to 6 questions per kind. The routing
+figures on this page are for the routing with the Swiss kinds answered in code.
 
 The defaults are unchanged. The room counter needs Apple Vision (macOS). Without it,
 apartments go to the LLM, which raises the cost by about $0.0004 per question and leaves the
