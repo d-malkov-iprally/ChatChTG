@@ -6,9 +6,9 @@ how many are correct by the eval rule, and how many by the pipeline's own unroun
 The two differ only when the answer text loses the number or the rounding to two decimals
 moves it across the 2% line.
 
-The other area rows went to the LLM. In a run with the fake provider they are not results:
-the fake LLM echoes the room table, and the rule reads a number from the echo. The script
-counts them as "not answered" and never as right or wrong.
+The other area rows went to the LLM. The script counts them and never calls them right or
+wrong. In a run with the fake provider they are not results: the fake LLM echoes the room
+table, and the rule reads a number from the echo.
 
 usage: uv run python scripts/eval_area_statement.py --results RUN.jsonl [--compare OTHER.jsonl]
 """
@@ -48,7 +48,7 @@ def main() -> None:
     print(f"Stated in code (model area-pipeline): {stated}")
     print(f"  correct by the rule, on the text:   {result['stated_correct']}")
     print(f"  correct by the pipeline's value:    {result['value_correct']}")
-    print(f"Not answered in this run (sent to the LLM): {result['not_answered']}")
+    print(f"Not stated in code (sent to the LLM): {result['not_answered']}")
     models = sorted({row["model"] for row in rows if row["type"] == "area"} - {"area-pipeline"})
     if "fake" in models:
         print("  These rows were answered by the fake LLM. They are not results.")

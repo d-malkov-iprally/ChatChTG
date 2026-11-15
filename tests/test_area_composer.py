@@ -309,6 +309,29 @@ def test_a_room_number_read_twice_is_described_by_the_reading_that_has_the_area(
     assert "few percent" not in computed.statement
 
 
+@pytest.mark.parametrize("order", [("printed", "measured"), ("measured", "printed")])
+def test_a_total_describes_each_reading_of_a_number_read_twice_by_its_own_method(library, plan, order):
+    areas_by_method = {"printed": 8.0, "measured": 9.0}
+    rooms = [room("1.01", "Zimmer", areas_by_method[method], method=method) for method in order]
+    result = analysis(rooms)
+    result.scale_read = False
+    plan(result)
+    query = parse_question(APARTMENT)
+
+    decision = decide(query, result)
+    context = compose(library, APARTMENT)
+
+    # A measured area on a guessed scale: the LLM gets the image.
+    assert decision.basis == "measured" and not decision.confident
+    assert context.computed is None
+    text = areas.statement_text(query, result, decision)
+    assert "- 1.01 Zimmer: 8.00 m² (printed on the plan)" in text
+    assert "- 1.01 Zimmer: 9.00 m² (measured from the drawn lines)" in text
+    assert "few percent" in text
+    table = areas.result_text(result, decision)
+    assert "8.00 m² (printed)" in table and "9.00 m² (measured)" in table
+
+
 @pytest.mark.parametrize(
     ("question", "total"),
     [

@@ -50,15 +50,15 @@ def _scale_text(analysis: PlanAnalysis) -> str:
     return f"scale not read, 1:{analysis.scale} assumed, so the measured areas may be wrong"
 
 
-def result_text(analysis: PlanAnalysis, answer: AreaAnswer) -> str:
+def result_text(analysis: PlanAnalysis, decision: AreaDecision) -> str:
+    answer = decision.answer
     lines = [f"Scale of the drawing: 1:{analysis.scale}.", answer.note, "Rooms added up:"]
-    methods = {room.number: room.method for room in analysis.rooms}
-    for room in answer.rooms:
+    for room, method in zip(answer.rooms, decision.methods):
         name = room.name or "no name"
         if room.area is None:  # only a room that was measured together with another one
             lines.append(f"- {room.number} {name}: included in the area of {room.region}")
             continue
-        lines.append(f"- {room.number} {name}: {_format_area(room.area)} m² ({methods.get(room.number)})")
+        lines.append(f"- {room.number} {name}: {_format_area(room.area)} m² ({method})")
     lines.append(f"Result: {_format_area(answer.value)} m²")
     return "\n".join(lines)
 
@@ -82,16 +82,6 @@ def table_text(analysis: PlanAnalysis) -> str:
     return "\n".join(lines)
 
 
-def _methods(analysis: PlanAnalysis) -> dict[str, str | None]:
-    """How the area of each room number was obtained. For a number that was read twice,
-    the reading that has an area counts: it is the one that ``answer_query`` uses."""
-    methods: dict[str, str | None] = {}
-    for room in analysis.rooms:
-        if methods.get(room.number) is None:
-            methods[room.number] = room.method
-    return methods
-
-
 @dataclass(frozen=True)
 class AreaDecision:
     """What the pipeline found for one question, and whether its result is the answer."""
@@ -101,15 +91,22 @@ class AreaDecision:
     """True: the pipeline's result is the answer. False: the LLM gets the image."""
     basis: Literal["printed", "measured"] | None
     """"measured" when any counted room was measured. None when there is no value."""
+    methods: tuple[str | None, ...]
+    """How the area of each counted room was obtained, in the order of ``answer.rooms``.
+    It is kept for each reading and not for each room number: a number that was read twice
+    can have a printed and a measured reading, and a total counts both."""
     doubts: tuple[str, ...]
     """``SCALE_DOUBT`` and ``GAP_DOUBT``, for every kind of question. They do not change
     ``confident``."""
 
 
 def decide(query: AreaQuery, analysis: PlanAnalysis) -> AreaDecision:
-    answer = answer_query(query, analysis.rows())
-    methods = _methods(analysis)
-    measured = any(methods.get(room.number) != "printed" for room in answer.rooms)
+    rows = analysis.rows()
+    # ``answer_query`` returns the rows it was given, so a row finds its reading.
+    method_of = {id(row): room.method for row, room in zip(rows, analysis.rooms)}
+    answer = answer_query(query, rows)
+    methods = tuple(method_of[id(row)] for row in answer.rooms)
+    measured = any(method != "printed" for method in methods)
     # A total may lack a room whose label was not read. On a plan that prints its areas
     # the LLM reads the labels reliably, so it gets the image then. On a plan without
     # printed areas it would have to estimate, and the tool's total is the better answer
@@ -129,6 +126,7 @@ def decide(query: AreaQuery, analysis: PlanAnalysis) -> AreaDecision:
         answer=answer,
         confident=answer.value is not None and not doubtful,
         basis=basis,
+        methods=methods,
         doubts=tuple(doubts),
     )
 
@@ -144,14 +142,13 @@ def statement_text(query: AreaQuery, analysis: PlanAnalysis, decision: AreaDecis
     how = "This result was read from the drawing by the measurement tool, without a language model."
     if analysis.scale_read:  # a guessed scale is not a fact about the drawing
         how += f" Scale of the drawing: 1:{analysis.scale}."
-    methods = _methods(analysis)
     rooms = []
-    for room in answer.rooms:
+    for room, method in zip(answer.rooms, decision.methods):
         name = room.name or "no name"
         if room.area is None:  # only a room that was measured together with another one
             rooms.append(f"- {room.number} {name}: included in the area of {room.region}")
             continue
-        obtained = _OBTAINED.get(methods.get(room.number) or "", "method unknown")
+        obtained = _OBTAINED.get(method or "", "method unknown")
         rooms.append(f"- {room.number} {name}: {_format_area(room.area)} m² ({obtained})")
     cautions = []
     if decision.basis == "measured":
@@ -197,7 +194,7 @@ class AreaComposer:
             return Context(
                 system=AREA_SYSTEM_PROMPT,
                 parts=[
-                    TextPart(text=result_text(analysis, decision.answer)),
+                    TextPart(text=result_text(analysis, decision)),
                     TextPart(text=request.message),
                 ],
                 computed=ComputedAnswer(
