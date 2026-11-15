@@ -121,11 +121,11 @@ To measure what a cross-check of measured areas against an LLM would change, wit
 
 ```sh
 uv run python scripts/eval_area_check.py signals    # the pipeline's value for every area question, and whether the check would be made; no LLM call
-uv run python scripts/eval_area_check.py select     # one such question per plan, into var/area-check/questions.jsonl
+uv run python scripts/eval_area_check.py select     # one such question per plan, into <state dir>/area-check/questions.jsonl
 uv run python scripts/eval_area_check.py replay --results <a baseline eval run on those questions>   # what the check would change
 ```
 
-The script reads `CHATCHTG_DATA_ROOT` and `CHATCHTG_STATE_DIR` and writes under `var/area-check/`. The eval run between `select` and `replay` is an ordinary `chatchtg eval ... --composer baseline` with the absolute path of the question file as `--questions`; with a real provider it is billed.
+The script reads `CHATCHTG_DATA_ROOT` and `CHATCHTG_STATE_DIR` and writes under `<state dir>/area-check/` (`var/area-check/` by default). `signals` keeps the analysis of each plan there: pass `--refresh` after a change to the pipeline. The eval run between `select` and `replay` is an ordinary `chatchtg eval ... --composer baseline` with the absolute path of the question file as `--questions`; with a real provider it is billed.
 
 The DXF files are used only to score and to explain errors, never to answer ([ADR 0003](docs/ADR/0003-floor-plans-only.md)). Results are in [docs/benchmarks](docs/benchmarks/).
 

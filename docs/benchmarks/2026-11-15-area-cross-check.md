@@ -6,14 +6,20 @@ its own estimate, and answer with that estimate when the two are more than 10% a
 
 **Result: negative. The idea did not pass its first gate, so the cross-check was not built
 and no billed run was made. On all 1,040 Swiss plans only 82 of the 2,218 answers that the
-check would look at are grossly wrong (3.7%; the gate asked for 5%). A checker that never
-errs could add at most 0.7 correct answers per 100 area questions.**
+check would look at are grossly wrong (3.7%; the gate asked for 5%). A checker whose
+estimate is always correct could add at most 0.8 correct answers per 100 area questions.**
+
+**These figures were made with the room measurer of `areas@3`.** The measurer has since
+changed for plans at 1:200 (`areas@4`, see
+[the area pipeline report](2026-11-14-area-pipeline.md)), and most eligible answers are on
+such plans. The measurement was not repeated. Fewer gross errors are expected with the new
+measurer, which would not change the result, but that is not measured.
 
 Nothing here called an LLM. The cost was $0.
 
 ## Setup
 
-- Code: branch `area-cross-check`, on top of `state-area-in-code` (pull request #20). The
+- Code: commit `bd8c2fe`, on top of pull request #20. The
   pipeline and its confidence rule are those of `areas@3`; `decide()` in
   `context/areas.py` gives the value, the basis and the doubts of each answer.
 - Questions: all 12,016 area questions of `data/floorplans/questions.jsonl`, on 1,040 Swiss
@@ -86,6 +92,12 @@ each, and never flags a good answer:
 | Checks made | 100 | 18.5 |
 | Answers that become right, at most | 3.7 | 0.68 |
 
+This is not a strict upper bound. The check compares the estimate with the pipeline's
+value, and "gross" is measured against the reference. An estimate that is itself within 2%
+of the reference, and not exactly on it, can also repair an answer that is 8 to 10% off:
+counted that way, up to 100 of the 2,218 eligible answers can become right (4.5 per 100
+checks, 0.83 per 100 area questions). That is still below the gate.
+
 Against that stands the cost. The pipeline's answer costs $0 today. Each check is one
 `baseline@1` call with the image. With Kimi K3.1 Pro on Modal a baseline answer cost $0.003
 to $0.20 in another session's run on this benchmark (45 questions, mean about $0.04; the 4
@@ -133,7 +145,7 @@ are the reason for the threshold and the eligibility rule. They were not repeate
 - On the 100-plan sample, 12 of the 20 gross answers were on plans at 1:200 or with a
   numbering gap. Hence the eligibility rule. A simulation with Opus's errors predicted 6.5
   more correct answers per 100 checks at 10%. The table above shows why that was too high:
-  on all plans a perfect checker gets 3.7 at most.
+  on all plans a perfect checker gets 3.7, and 4.5 at the very most.
 
 ## Limits
 
@@ -155,9 +167,15 @@ are the reason for the threshold and the eligibility rule. They were not repeate
 
 ```sh
 export CHATCHTG_DATA_ROOT=/absolute/path/to/data    # the folder that holds floorplans/
-uv run python scripts/eval_area_check.py signals --workers 7   # about an hour of CPU; no LLM call
+uv run python scripts/eval_area_check.py signals --workers 7 --refresh   # about an hour of CPU; no LLM call
 uv run python scripts/eval_area_check.py select --n 100 --seed 0
 ```
+
+`--refresh` analyses every plan again. Without it `signals` reads the analyses that an
+earlier run kept in `<state dir>/area-check/analyses`, also after a change to the pipeline.
+On the current code the figures will differ from this record (see the note at the top).
+The question file below is at `var/area-check/` only when `CHATCHTG_STATE_DIR` is not set
+and the commands run from the repository root.
 
 The billed step, not run. `replay` prints the numbers of Gate B and the size of the model's
 error:

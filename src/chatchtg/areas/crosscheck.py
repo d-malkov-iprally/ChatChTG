@@ -15,7 +15,7 @@ from typing import Literal
 
 DISAGREEMENT = 0.10
 """The two values disagree when they are further apart than this share of the tool's
-value. Fixed before the billed run that measured the check."""
+value. Fixed before the check was measured."""
 
 
 @dataclass(frozen=True)

@@ -14,7 +14,11 @@ the LLM's estimate from an ordinary ``baseline`` eval run on the same questions.
 The paths come from the settings (CHATCHTG_DATA_ROOT, CHATCHTG_STATE_DIR); everything the
 script writes is under ``<state dir>/area-check/``.
 
-usage: uv run python scripts/eval_area_check.py signals [--plans N] [--seed 0] [--workers 6]
+``signals`` keeps the analysis of each plan in ``<state dir>/area-check/analyses`` by the
+plan name. Pass ``--refresh`` after a change to the pipeline: without it the old analyses
+are read again.
+
+usage: uv run python scripts/eval_area_check.py signals [--plans N] [--seed 0] [--workers 6] [--refresh]
        uv run python scripts/eval_area_check.py select [--n 100] [--seed 0]
        uv run python scripts/eval_area_check.py replay --results <eval run file> [--threshold 0.10]
 """
@@ -46,7 +50,8 @@ QUESTION_FIELDS = ("path", "question", "answer", "type", "unit")
 
 
 def analyse(job: tuple[str, str]) -> tuple[str, dict]:
-    """Analyse one plan in a worker process and cache the result."""
+    """Analyse one plan in a worker process and cache the result. A failure is not cached:
+    the next run tries the plan again."""
     import numpy as np
     from PIL import Image
 
@@ -59,7 +64,7 @@ def analyse(job: tuple[str, str]) -> tuple[str, dict]:
         image = np.array(Image.open(image_path).convert("RGB"))
         result = analyse_plan(image).to_json()
     except Exception as error:  # keep the run going; the plan has no answers
-        result = {"error": repr(error)}
+        return Path(image_path).stem, {"error": repr(error)}
     Path(cache_path).write_text(json.dumps(result))
     return Path(image_path).stem, result
 
@@ -219,8 +224,9 @@ def signals(args: argparse.Namespace, settings: Settings, work_dir: Path) -> Non
     todo = []
     for stem in stems:
         cached = cache / f"{stem}.json"
-        if cached.is_file():
-            analyses[stem] = json.loads(cached.read_text())
+        result = json.loads(cached.read_text()) if cached.is_file() and not args.refresh else None
+        if result is not None and "error" not in result:  # a failure cached by an older version is tried again
+            analyses[stem] = result
         else:
             image = dataset / questions[stem][0]["path"]
             todo.append((str(image), str(cached)))
@@ -307,6 +313,7 @@ def main() -> None:
     signals_parser.add_argument("--plans", type=int, help="this many plans, picked with the seed (default: all)")
     signals_parser.add_argument("--seed", type=int, default=0)
     signals_parser.add_argument("--workers", type=int, default=6)
+    signals_parser.add_argument("--refresh", action="store_true", help="analyse every plan again (after a change to the pipeline)")
     signals_parser.set_defaults(run=signals)
     select_parser = commands.add_parser("select", help="one eligible question per plan, as a question file")
     select_parser.add_argument("--n", type=int, default=100)
