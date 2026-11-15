@@ -142,22 +142,36 @@ def test_a_bathtub_with_a_thick_outline_stays_in_its_room_at_1_200():
     assert room.area_m2 == pytest.approx(area_200(60, 50, 116, 110), rel=0.02)
 
 
+def owned(debug: dict, x: int, y: int) -> bool:
+    """Whether the free component at a pixel was joined to a room."""
+    return int(debug["labels"][y, x]) in debug["owner"]
+
+
 def test_a_small_room_without_a_label_is_not_joined_to_its_neighbour():
     """A room 1.0 m wide whose label was not read, behind a wall too thin to show its fill."""
     sketch = room_with_walls(60, 50, 134, 110)
     sketch.line(102, 50, 102, 110, 0, 4.0)
-    [room] = measure_rooms(sketch.image(), [(80, 80)], PPM_200)
+    debug: dict = {}
+    [room] = measure_rooms(sketch.image(), [(80, 80)], PPM_200, debug=debug)
+    # The outline of a room leaves out a piece behind a wall, so the area alone does not
+    # show a wrong join: the owner of the neighbour's free space does.
+    assert owned(debug, 80, 80) and not owned(debug, 118, 80)
     assert room.area_m2 == pytest.approx(area_200(60, 50, 101, 110), rel=0.02)
 
 
 def test_a_shaft_behind_a_wall_is_not_joined():
+    """A shaft 20 x 30 px in a block of wall, 4 px behind the wall face of the room: within
+    reach of the room's free space, so only the wall fill around it keeps it out."""
     sketch = room_with_walls(60, 50, 120, 110)
-    sketch.wall(132, 38, 164, 122)  # a block of wall next to the room, with a shaft 20 x 30 px in it
-    sketch._box(133, 61, 153, 91, 255)
-    sketch.line(132, 60, 154, 60, 0, 2)
-    sketch.line(132, 92, 154, 92, 0, 2)
-    sketch.line(154, 60, 154, 92, 0, 2)
-    [room] = measure_rooms(sketch.image(), [(90, 80)], PPM_200)
+    sketch.wall(120, 38, 164, 122)
+    sketch._box(124, 61, 144, 91, 255)
+    sketch.line(123, 60, 145, 60, 0, 2)
+    sketch.line(123, 92, 145, 92, 0, 2)
+    sketch.line(123, 60, 123, 92, 0, 2)
+    sketch.line(145, 60, 145, 92, 0, 2)
+    debug: dict = {}
+    [room] = measure_rooms(sketch.image(), [(90, 80)], PPM_200, debug=debug)
+    assert owned(debug, 90, 80) and not owned(debug, 134, 76)
     assert room.area_m2 == pytest.approx(area_200(60, 50, 120, 110), rel=0.02)
 
 

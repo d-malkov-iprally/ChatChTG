@@ -30,7 +30,7 @@ from chatchtg.evals.room_truth import TruthPlan
 
 SETTINGS = Settings.from_env()
 PLANS = SETTINGS.data_root / "floorplans" / "data" / "swiss_dwellings"
-TRUTH = SETTINGS.state_dir / "room-truth"
+TRUTH = Path("var/room-truth")  # where scripts/build_room_truth.py writes it
 PATTERNS = ("ok", "lost", "both", "leak", "edges", "no-area")
 GROUPS = {
     "bath": ("bad", "bain", "bagno"),
