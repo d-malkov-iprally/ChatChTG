@@ -6,16 +6,17 @@ from __future__ import annotations
 import html
 import io
 import json
+import time
 
 import streamlit as st
 from PIL import Image
 
 from chatchtg.config import Settings
-from chatchtg.demo import load_demo_set, register_demo_set
+from chatchtg.demo import REPLAY_WAIT_SECONDS, load_demo_set, register_demo_set
 from chatchtg.documents.library import UnsupportedDocumentError
 from chatchtg.evidence import colour_key, describe_method, geometry, legend_rows, render_evidence
 from chatchtg.schemas import AnswerRequest
-from chatchtg.wiring import build_answer_service, build_library
+from chatchtg.wiring import build_answer_service, build_library, build_saved_answers
 
 st.set_page_config(page_title="ChatChTG", page_icon="🧭", layout="wide")
 
@@ -25,7 +26,9 @@ def services():
     settings = Settings.from_env()
     library = build_library(settings)
     demo = register_demo_set(library, settings.data_root, load_demo_set())
-    return library, build_answer_service(settings, library), demo
+    # The saved answers are read once: start the app again after `chatchtg demo-answers`.
+    saved = build_saved_answers(settings).load()
+    return library, build_answer_service(settings, library), demo, saved
 
 
 @st.cache_data(show_spinner=False)
@@ -275,10 +278,17 @@ def ask_demo_question(document_id: str, index: int) -> None:
     st.session_state["demo_question"] = (document_id, index)
 
 
-def keep_answer(answer_service, document, message: str, reference: str | None) -> None:
-    """Answer the question and keep the answer for the reruns that the controls cause."""
+def keep_answer(answer_service, document, message: str, reference: str | None, saved=None) -> None:
+    """Answer the question and keep the answer for the reruns that the controls cause.
+
+    With a ``saved`` response, nothing is asked: the response is shown after a short wait.
+    """
     with st.spinner("Analyzing drawing..."):
-        response = answer_service.answer(AnswerRequest(document_id=document.id, message=message))
+        if saved is not None:
+            time.sleep(REPLAY_WAIT_SECONDS)
+            response = saved
+        else:
+            response = answer_service.answer(AnswerRequest(document_id=document.id, message=message))
     st.session_state.setdefault("asked", set()).add((document.id, message))
     # The number gives the controls of each answer their own state.
     st.session_state["answer"] = {
@@ -290,7 +300,7 @@ def keep_answer(answer_service, document, message: str, reference: str | None) -
     }
 
 
-def render_workspace(document, library, answer_service, demo_drawing=None) -> None:
+def render_workspace(document, library, answer_service, demo_drawing=None, saved_answers=None) -> None:
     try:
         content = library.read(document.id)
     except Exception as error:  # the file is gone or was replaced
@@ -320,7 +330,8 @@ def render_workspace(document, library, answer_service, demo_drawing=None) -> No
             pending = st.session_state.pop("demo_question", None)
             if pending is not None and pending[0] == document.id and pending[1] < len(questions):
                 question = questions[pending[1]]
-                keep_answer(answer_service, document, question.text, question.reference)
+                saved = (saved_answers or {}).get((document.id, question.text))
+                keep_answer(answer_service, document, question.text, question.reference, saved)
             if questions:
                 # The trail of the demo: a click asks the question, a question that was asked changes colour.
                 asked = st.session_state.get("asked", set())
@@ -437,11 +448,11 @@ def render_empty_workspace() -> None:
 
 
 inject_styles()
-library, answer_service, demo = services()
+library, answer_service, demo, saved_answers = services()
 render_header()
 document, demo_drawing = render_document_picker(library, demo)
 
 if document is None:
     render_empty_workspace()
 else:
-    render_workspace(document, library, answer_service, demo_drawing)
+    render_workspace(document, library, answer_service, demo_drawing, saved_answers)

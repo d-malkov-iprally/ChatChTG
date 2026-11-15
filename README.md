@@ -41,6 +41,7 @@ The pre-commit hook (`.githooks/pre-commit`) runs `uv run pytest` and aborts the
 
 ```sh
 uv run chatchtg serve                                  # Streamlit app
+uv run chatchtg demo-answers                           # save the answers of the demo questions for a recording
 uv run chatchtg ingest data/preview                    # register the dataset's PNG/JPEG drawings
 uv run chatchtg eval data/preview --limit 50           # answer and score dataset questions
 uv run chatchtg eval data/floorplans --questions questions-subset.jsonl --sample 100 --max-cost 4
@@ -60,6 +61,20 @@ CHATCHTG_COMPOSER=combined CHATCHTG_ROOM_COUNTER=confident CHATCHTG_OBJECT_COUNT
 - The set was picked for the settings above. With them, code answers all 43 questions and the app draws the evidence: the areas and apartment counts of the Swiss plans, the object counts of the Finnish plans. Checked on 2026-11-15 through `AnswerService` with the fake provider: every answer was made in code and equal to the benchmark's answer (areas within 2%). The Finnish counts need the stored detections of the drawings (see [Object counting](#object-counting)).
 - Every plan of the set is a held-out plan of the code path that answers it, so no answer of the demo comes from a detector on a plan it was trained on. The set is still cherry-picked: it shows what works, and it is not a score.
 - With other settings a chip sends its question to the LLM, as a typed question does. With a real provider that is billed.
+
+#### Saved answers for a recording
+
+To record the demo with the same answer on every take, save the answers first:
+
+```sh
+CHATCHTG_COMPOSER=combined CHATCHTG_ROOM_COUNTER=confident CHATCHTG_OBJECT_COUNTER=detections uv run chatchtg demo-answers
+```
+
+- The command answers every question of the demo set once through `AnswerService`, prints each answer with the benchmark's answer, and writes them to `demo-answers.json` in `CHATCHTG_STATE_DIR` (`var/` by default). Each run replaces the file. With a real provider, the questions that the LLM answers are billed.
+- The app reads the file when it starts, so start it again after the command. A click on a chip that has a saved answer shows that answer, with its evidence, after a wait of one second, and asks nothing. The screen does not say that the answer was saved, and the real wait is longer: do not present the recording as a measure of speed.
+- A typed question and a chip without a saved answer are answered live.
+- The file records the composer, the provider, the model and the counter settings that it was made with. An app that runs with other values does not use it and writes a warning to its log: run the command again with the settings of the app.
+- To go back to live answers, delete the file and start the app again.
 
 ### Detection demo
 

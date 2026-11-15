@@ -1,4 +1,4 @@
-"""Command line entry point: chatchtg serve | detect-demo | ingest | eval | benchmark."""
+"""Command line entry point: chatchtg serve | detect-demo | demo-answers | ingest | eval | benchmark."""
 
 from __future__ import annotations
 
@@ -11,10 +11,12 @@ from pathlib import Path
 from chatchtg.config import Settings
 from chatchtg.context.composer import composer_id
 from chatchtg.context.registry import COMPOSERS, get_composer
+from chatchtg.demo import load_demo_set, register_demo_set
 from chatchtg.documents.library import RASTER_SUFFIXES, UnsupportedDocumentError
 from chatchtg.evals.benchmark import build_benchmark
 from chatchtg.evals.runner import UnknownPriceError, run_eval
-from chatchtg.wiring import build_answer_service, build_judge, build_library
+from chatchtg.schemas import AnswerRequest
+from chatchtg.wiring import build_answer_service, build_judge, build_library, build_saved_answers
 
 
 def serve(_: argparse.Namespace) -> int:
@@ -27,6 +29,41 @@ def detect_demo(_: argparse.Namespace) -> int:
     # The demo shows files of this machine, so it is served to this machine only.
     command = [sys.executable, "-m", "streamlit", "run", "--server.address=127.0.0.1", str(app)]
     return subprocess.call(command)
+
+
+def demo_answers(_: argparse.Namespace) -> int:
+    """Answer every question of the demo set once and save the answers for the app to show."""
+    settings = Settings.from_env()
+    try:
+        library = build_library(settings)
+        service = build_answer_service(settings, library)
+    except ValueError as error:  # a CHATCHTG_* setting with an unknown value
+        print(error, file=sys.stderr)
+        return 2
+    registered = register_demo_set(library, settings.data_root, load_demo_set())
+    if not registered:
+        print(f"No drawing of the demo set is below {settings.data_root}", file=sys.stderr)
+        return 2
+    answers = {}
+    failed = 0
+    for drawing, record in registered:
+        for question in drawing.questions:
+            try:
+                response = service.answer(AnswerRequest(document_id=record.id, message=question.text))
+            except Exception as error:  # one question must not lose the answers of the others
+                print(f"{drawing.title} · {question.label}: not answered: {error}", file=sys.stderr)
+                failed += 1
+                continue
+            answers[(record.id, question.text)] = response
+            text = " ".join(response.text.split())
+            print(f"{drawing.title} · {question.label} [{response.model}]: {text}")
+            if question.reference:
+                print(f"    benchmark: {question.reference}")
+    store = build_saved_answers(settings)
+    store.save(answers)
+    print(f"Answers saved: {len(answers)}. Not answered: {failed}. LLM provider: {settings.llm_provider}.")
+    print(f"File: {store.path}")
+    return 1 if failed else 0
 
 
 def ingest(args: argparse.Namespace) -> int:
@@ -157,6 +194,10 @@ def main(argv: list[str] | None = None) -> int:
     commands.add_parser(
         "detect-demo", help="start the open-vocabulary detection demo (needs the detect extra)"
     ).set_defaults(run=detect_demo)
+
+    commands.add_parser(
+        "demo-answers", help="answer the questions of the demo set once and save the answers for the app"
+    ).set_defaults(run=demo_answers)
 
     ingest_parser = commands.add_parser("ingest", help="register a dataset's raster drawings")
     ingest_parser.add_argument("dataset_dir", type=Path, help="for example data/preview")

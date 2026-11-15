@@ -7,6 +7,7 @@ import logging
 from chatchtg.answering import AnswerService
 from chatchtg.config import Settings
 from chatchtg.context.registry import get_composer
+from chatchtg.demo import SAVED_ANSWERS_FILE, SavedAnswers
 from chatchtg.documents.blobs import LocalBlobStore
 from chatchtg.documents.library import DocumentLibrary
 from chatchtg.documents.metadata import SqliteMetadataStore
@@ -71,6 +72,21 @@ def build_answer_service(
         room_counter=room_counter,
         trust_room_counter=settings.room_counter == "always",
         object_counter=object_counter,
+    )
+
+
+def build_saved_answers(settings: Settings) -> SavedAnswers:
+    """The saved answers of the demo questions, tied to the settings that decide an answer."""
+    return SavedAnswers(
+        settings.state_dir / SAVED_ANSWERS_FILE,
+        made_with={
+            "composer": settings.composer,
+            "llm_provider": settings.llm_provider,
+            "llm_model": settings.llm_model,
+            "room_counter": settings.room_counter,
+            "object_counter": settings.object_counter,
+            "object_counter_skip": settings.object_counter_skip,
+        },
     )
 
 

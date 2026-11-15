@@ -13,7 +13,8 @@ from chatchtg.config import Settings
 from chatchtg import evidence as evidence_module
 from chatchtg.context import areas
 from conftest import EvidenceComposer
-from chatchtg.wiring import build_library
+from chatchtg.schemas import AnswerResponse
+from chatchtg.wiring import build_library, build_saved_answers
 
 APP = str(Path(app_module.__file__))
 
@@ -243,6 +244,43 @@ def test_app_opens_on_the_demo_drawings_and_a_chip_asks_its_question(tmp_path, m
     assert any("Benchmark answer: 3" in block.value for block in app.caption)
     kinds = {button.label: button.proto.type for button in app.button}
     assert kinds["2 · Windows"] == "primary" and kinds["1 · Doors"] == "secondary"   # the trail marks what was asked
+
+
+def test_app_shows_the_saved_answer_of_a_chip_and_asks_nothing(tmp_path, monkeypatch):
+    demo_set(tmp_path, monkeypatch)
+    settings = Settings.from_env()
+    AppTest.from_file(APP).run()                      # registers the drawings
+    streamlit.cache_resource.clear()
+    document = next(r for r in build_library(settings).list() if r.filename == "first.png")
+    build_saved_answers(settings).save({
+        (document.id, "How many windows on plan 0?"): AnswerResponse(
+            text="The saved answer: 3", composer="baseline@1", model="saved-model"
+        )
+    })
+    waits = []
+    monkeypatch.setattr("chatchtg.demo.REPLAY_WAIT_SECONDS", 0.25)
+    monkeypatch.setattr("time.sleep", waits.append)
+
+    def never(self, request):
+        raise AssertionError("a saved answer must not be asked again")
+
+    app = AppTest.from_file(APP).run()
+    monkeypatch.setattr("chatchtg.answering.AnswerService.answer", never)
+    next(button for button in app.button if button.label == "2 · Windows").click().run()
+
+    assert not app.exception
+    assert any(block.value == "The saved answer: 3" for block in app.markdown)
+    assert any("Model: saved-model" in block.value for block in app.caption)
+    assert any("Benchmark answer: 3" in block.value for block in app.caption)
+    assert 0.25 in waits                                # the wait before a saved answer
+
+    # A chip without a saved answer is asked.
+    monkeypatch.setattr("chatchtg.answering.AnswerService.answer", lambda self, request: AnswerResponse(
+        text="A live answer", composer="baseline@1", model="live-model"
+    ))
+    next(button for button in app.button if button.label == "1 · Doors").click().run()
+    assert not app.exception
+    assert any(block.value == "A live answer" for block in app.markdown)
 
 
 def test_app_changes_the_questions_with_the_demo_drawing(tmp_path, monkeypatch):
