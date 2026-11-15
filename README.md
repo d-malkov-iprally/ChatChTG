@@ -171,6 +171,7 @@ Set these in the shell or in `.env`:
 | `CHATCHTG_STATE_DIR` | `var` | where state is written |
 | `CHATCHTG_COMPOSER` | `baseline` | context composer used by the app: `baseline`, `areas` or `room-conventions` |
 | `CHATCHTG_ROOM_COUNTER` | `off` | `confident`: code answers a room-count question when it is as accurate as the LLM; `always`: code answers every room-count question; see [Room counting](#room-counting) |
+| `CHATCHTG_OBJECT_COUNTER` | `off` | `detections`: code answers a window, door, toilet, sink or shower-and-bathtub count on a Finnish plan from the detections stored for the drawing; see [Object counting](#object-counting) |
 | `CHATCHTG_LLM_PROVIDER` | `fake` | LLM adapter: `fake`, `claude` or `modal` |
 | `CHATCHTG_ANTHROPIC_API_KEY` | not set | this project's Anthropic key, used instead of `ANTHROPIC_API_KEY` |
 | `CHATCHTG_MODAL_ENDPOINT` | not set | hostname of the Modal Shared Endpoint that the `modal` adapter calls |
@@ -199,6 +200,28 @@ Almost half of the benchmark questions count rooms: bedrooms, saunas, kitchens, 
   uv run python -m chatchtg.rooms.report data/floorplans var/rooms.jsonl      # accuracy per kind of question
   ```
 
+## Object counting
+
+About 36% of the benchmark questions count objects on Finnish (CubiCasa5K) plans: windows, doors, toilet bowls, sinks and wash basins, and showers and bathtubs together, in English and Finnish. The object counter (`objects/`) answers them in code from the detections of a symbol detector (RF-DETR, trained on the CubiCasa5K labels, see [object_detector/README.md](object_detector/README.md)). The measurements are in [docs/benchmarks/2026-11-15-object-counter.md](docs/benchmarks/2026-11-15-object-counter.md).
+
+- The detector does not run in the app: it needs torch and a GPU. The detections are made in one batch on Modal and stored as extractions (`var/metadata/<sha256>/rfdetr-large-1024@1.json`). A drawing without stored detections, for example a new upload, is answered by the LLM as before.
+- With `CHATCHTG_OBJECT_COUNTER=detections`, `AnswerService` asks the object counter first. The response carries `method` (`detector`) and `evidence`: each counted object with its box and its reference in the extraction store.
+- A detection is counted when its score reaches the minimum of its class (`THRESHOLDS` in `objects/counter.py`), chosen on the valid split of CubiCasa5K.
+
+```sh
+# Predict every CubiCasa5K plan on Modal (GPU), then download the detections
+uv run --group train modal run -m object_detector.modal_predict::predict_all --run-name large-1024
+uv run --group train modal volume get chatchtg-object-detector predictions/large-1024/detections.jsonl var/detections/
+uv run --group train modal volume get chatchtg-object-detector predictions/large-1024/settings.json var/detections/
+
+# Store them as extractions, under the hash of each benchmark image
+uv run python -m chatchtg.objects.importer var/detections/detections.jsonl data/floorplans/data/cubicasa5k
+
+# Choose the minimum scores on the valid split; score per split; replay eval runs
+uv run python -m chatchtg.objects.tune data/floorplans/questions.jsonl var/detections/detections.jsonl
+uv run python -m chatchtg.objects.report data/floorplans/questions.jsonl --replay var/eval-runs/<run>.jsonl
+```
+
 ## Architecture
 
 One interaction is `(document, message) -> response`, single turn.
@@ -215,7 +238,8 @@ blobs.py   metadata.py
 
 - **Document storage** (`documents/blobs.py`): uploads are copied to `var/blobs/`; dataset files are referenced in place.
 - **Metadata storage** (`documents/metadata.py`): one SQLite record per document, with free-form JSON attributes.
-- **Extraction storage** (`extractions/`): the facts that a producer derived from a drawing (rooms, objects, their geometry and measures), one JSON file per drawing and producer version in `var/metadata/`. The format is in [docs/metadata-format.md](docs/metadata-format.md). Nothing reads or writes it yet.
+- **Extraction storage** (`extractions/`): the facts that a producer derived from a drawing (rooms, objects, their geometry and measures), one JSON file per drawing and producer version in `var/metadata/`. The format is in [docs/metadata-format.md](docs/metadata-format.md). The object counter reads the detections from it.
+- **Object counter** (`objects/`): optional. `AnswerService` asks it first; when the question is not an object count on a Finnish plan, or the drawing has no stored detections, the room counter and the LLM answer. See [Object counting](#object-counting).
 - **Room counter** (`rooms/`): optional. `AnswerService` asks it first; when it is not confident, or the question is not a room count, the LLM answers. See [Room counting](#room-counting).
 - **Context composer** (`context/`): a pure function `(document record, bytes, message) -> Context`. It never calls an LLM. To add a strategy, write a composer and list it in `context/registry.py`.
 - **LLM** (`llm/`): `LLMClient.complete(Context) -> Completion`. To add a provider, write one adapter and add a branch to `build_llm`.
