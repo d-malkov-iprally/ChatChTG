@@ -125,7 +125,8 @@ three changes:
   reader on 40 others; the 100 plans above exclude the first 40 but may include some of the
   second. If the judges' plans are these same 1,040, the constants are fitted to the test set.
 - **1:200 plans are the weak spot**: small rooms are a few dozen pixels wide, labels cover
-  fixtures, and 1 room number in 18 is not read.
+  fixtures, and 1 room number in 18 is not read. (Measured again, with two changes to the
+  measurer, in the update "measuring on 1:200 plans" below.)
 - **Stairs next to a corridor without a wall** are sometimes split wrongly, because the tread
   lines hide the separator.
 - **A room polygon that overlaps a wall in the data** cannot be recovered from the image.
@@ -150,3 +151,165 @@ Of the 16 questions that now go to the LLM and did not before, 12 had a wrong an
 No question changed from right to wrong in code. On `site10161_bldg14756_floor39134` (not in
 this sample) the apartment total went from 68.14 m² to 57.70 m², against a reference of 57.87.
 No LLM run was repeated for this update.
+
+## Update of 2026-11-15: measuring on 1:200 plans
+
+Two changes to the room measurer (`areas/measure.py`, composer `areas@3`), both taken from a
+diagnosis of the wrong rooms on the tuning plans:
+
+- **A cut-off fixture is joined to its room.** The inside of a bathtub or a kitchen counter
+  was left out of the room when its outline was too wide to join across (the double outline
+  of a tub is a band of ink 4 to 5 px wide at 1:200), when it was taken for an opening pocket,
+  or when a line next to it looked like a room boundary. A free component without a label
+  that is 0.05 to 2.5 m² large and at least 0.5 m wide, lies within 6 px of one or two rooms
+  and has less than half of its surroundings in wall fill now joins the room.
+- **A room edge is placed at the wall behind a fixture line.** Where the grey fill of a wall
+  follows within 8 px, the edge is the centre of the black outline that ends at the fill, and
+  not the first line met. A plain wall is measured as before.
+
+The image is not enlarged, and nothing is gated on the scale: both changes also helped at 1:100.
+
+### The split
+
+The measurer was tuned on 40 plans, 20 of each scale. Of the 1,040 Swiss plans, 177 are at
+1:200 (20 for tuning, 157 held out) and 863 at 1:100 (20 and 843). The lists are in
+[stems/](stems/): `tune-200.txt`, `heldout-200.txt`, `tune-100.txt`, `heldout-100.txt`. The rules
+and thresholds were chosen on the tuning plans only. The held-out plans were scored twice, once
+on the code before the changes and once on the final code; no held-out image or per-plan result
+was looked at in between. The label reader was tuned on 40 other plans, and some of them are in
+the held-out lists. The label reader did not change, so this does not favour either side.
+
+### Result on the held-out plans
+
+Same plans before and after. "Measurer alone" is `scripts/eval_measure.py`: label positions and
+text boxes from the DXF truth, a room is right when its area is within 2%. "Area questions" is
+`scripts/eval_areas.py`: the whole pipeline with its own OCR.
+
+| | Before | After |
+|---|---|---|
+| Measurer alone, 1:200, 157 plans, 8,410 rooms | 66.5% | 70.5% |
+| Measurer alone, 1:100, 843 plans, 18,881 rooms | 87.1% | 90.8% |
+| Area questions, 1:200, 157 plans, 1,854 questions | 73.7% | 78.9% |
+| Area questions, 1:100, 100 plans (drawn with seed 3), 1,152 questions | 92.2% | 92.9% |
+| Correct when the pipeline is confident, 1:200 (958 questions) | 78.5% | 82.3% |
+| Correct when the pipeline is confident, 1:100 (1,060 questions) | 93.8% | 94.3% |
+| Wrong answers with the cause "area off: measured", 1:200 / 1:100 | 278 / 64 | 214 / 56 |
+
+Paired counts:
+
+| | Became right | Became wrong |
+|---|---|---|
+| Rooms, measurer alone, 1:200 | 411 | 81 |
+| Rooms, measurer alone, 1:100 | 789 | 99 |
+| Area questions, 1:200 | 122 | 26 |
+| Area questions, 1:100 | 12 | 4 |
+
+The measurer alone gained 4.0 points at 1:200. The target set before the run was 5 points, so
+that target was **not met**; the targets for the questions at 1:200 (2 points, twice as many
+gained as lost) and for 1:100 (no more lost than gained) were met. On the tuning plans the gain
+at 1:200 was 6.1 points (62.9% to 69.0%, 71 rooms gained and 4 lost), so a third of it did not
+carry over. At 1:100 the tuning plans went from 88.6% to 92.2%.
+
+Failure patterns of the wrong rooms, measurer alone, held-out plans:
+
+| Pattern | 1:200 before | 1:200 after | 1:100 before | 1:100 after |
+|---|---|---|---|---|
+| A piece of the room is missing | 878 | 528 | 409 | 247 |
+| A piece is missing and a neighbour is taken in | 25 | 22 | 26 | 24 |
+| A neighbour or a wall pocket is taken in | 566 | 630 | 781 | 858 |
+| The region is right, an edge is misplaced | 1,345 | 1,304 | 1,214 | 611 |
+
+The price of joining fixtures is in the third row: 44 rooms at 1:200 and 68 at 1:100 that were
+right now take in a space that is not theirs (the pocket of an opening, a fixture of the room
+next door).
+
+| Rooms within 2%, measurer alone | 1:200 before | 1:200 after | 1:100 before | 1:100 after |
+|---|---|---|---|---|
+| Bathrooms | 17.1% | 32.1% | 72.3% | 90.2% |
+| Kitchens | 75.6% | 83.0% | 89.9% | 93.5% |
+| Rooms without a name | 42.5% | 47.3% | 62.0% | 68.1% |
+| Other rooms | 80.0% | 80.7% | 90.9% | 91.3% |
+| Under 4 m² | 35.8% | 42.4% | 74.6% | 85.7% |
+| 4 to 8 m² | 53.0% | 61.9% | 86.7% | 92.2% |
+| 8 to 15 m² | 81.6% | 83.1% | 93.0% | 93.6% |
+| Over 15 m² | 85.6% | 85.7% | 91.3% | 90.5% |
+
+CPU time of the measurer: +0.03 s per plan at 1:200 and +0.01 s at 1:100 (0.59 to 0.62 s and
+0.57 to 0.58 s). The machine was shared with other jobs, so both versions were run in turn on
+the same 40 tuning plans in one process, and the CPU time of the process was taken, the lower
+of two runs each. The OCR, 5 to 15 s per plan, did not change.
+
+### The diagnosis
+
+On the 20 tuning plans at 1:200, 408 of 1,101 rooms were off by more than 2%: 167 lacked a
+piece, 157 had the right region with misplaced edges, 84 took in a neighbour.
+
+Why a piece was lost (154 pieces of 0.05 m² or more in 104 rooms, 101 m²; the other 63 rooms
+lost ink or smaller pieces):
+
+| Reason | Pieces | Share of the area |
+|---|---|---|
+| It lost the vote: a line next to it looks joinable towards a second room or the outside | 33 | 32% |
+| Its outline is too wide to join across | 38 | 19% |
+| It was taken for the pocket of an opening | 23 | 17% |
+| It holds the label of another room, or is joined to one | 32 | 15% |
+| Its outline is classed as a room boundary | 16 | 11% |
+| It lies behind wall fill | 12 | 7% |
+
+Unlabelled free components of 0.05 to 3 m² on these plans: 123 lie in a room of the DXF truth
+and 2,588 do not (opening pockets, window panes, shafts). The short side separates them: half of
+the components in a room are 0.54 m or more wide, 95% of the others are under 0.37 m. The rule
+above picks 74 components, 72 of them in a room: 59% of the components in a room and 76% of
+their area. The rule that was planned first (any component near exactly one room with little
+wall fill around it) picked 1,025, of which 958 were not in a room.
+
+In the edges-only rooms 13% of the edges lay more than 1 px inside the reference edge. In all 10
+crops that were looked at, a fixture ran along the wall: its line stood 1 to 3 px in front of
+the wall outline or had merged with it.
+
+Step by step on the tuning plans, rooms within 2%: before 62.9%; fixtures joined 64.5%; edges
+at the wall as well 69.0%. With 6% of the labels left out at random, the unlabelled rooms that
+are taken in by a neighbour rose from 86 to 99 of 220 at 1:200, and the labelled rooms within 2%
+from 1,883 to 2,055 of 3,083 (three draws on each of the 20 plans).
+
+### Tried and rejected
+
+- **Enlarging the image for the measurer** makes it worse (measured before this work, on the
+  tuning plans at 1:200): native 62.9%, x1.25 56.6%, x1.5 45.5%, x2 28.4%. The stroke constants
+  are fitted to the renderer's anti-aliased strokes in native pixels.
+- **Retuning single constants** (the black-core threshold, the separator band, the island size)
+  stayed within 1 point at both scales.
+- **Placing every edge at the wall outline**, also on plain walls: 69.4% at 1:200 on the tuning
+  plans against 69.0%, but it changed the area of 978 rooms instead of 698. The rule that
+  leaves plain walls alone was kept.
+
+### Limits that stay
+
+- **Small rooms at 1:200.** A 4 m² room is within 2% only when each edge is right to 0.3 px,
+  and the edges scatter by about 0.2 px. 42% of the rooms under 4 m² are within 2%.
+- **A fixture line along a wall too thin to show its fill** still pulls the edge in: the far
+  side of such a wall is the next room, so there is no fill to measure from.
+- **Fixtures narrower than 0.5 m** are not joined; they look like opening pockets.
+- **A joined piece behind an outline that is classed as wall** does not get into the room
+  outline, which is drawn around the largest connected piece. Judged by the rooms whose pixel
+  region grew and whose outline did not, this was so for about 114 of 538 rooms that got a
+  piece on the held-out plans at 1:200. If the piece is larger than the room, the area becomes
+  that of the piece (about 2 rooms of 8,410).
+- **A small room whose label was not read** can be taken in by its neighbour when its walls are
+  thin or it is bounded by separators.
+- **A room whose label sits on a fixture** is still measured as the fixture.
+
+### To repeat
+
+```sh
+uv run python scripts/eval_measure.py --stems docs/benchmarks/stems/heldout-200.txt
+uv run python scripts/eval_measure.py --stems docs/benchmarks/stems/heldout-100.txt
+uv run python scripts/eval_areas.py --stems docs/benchmarks/stems/heldout-200.txt --refresh
+uv run python -c "import random; s=open('docs/benchmarks/stems/heldout-100.txt').read().split(); random.Random(3).shuffle(s); print('\n'.join(sorted(s[:100])))" > var/heldout-100-sample.txt
+uv run python scripts/eval_areas.py --stems var/heldout-100-sample.txt --refresh
+```
+
+"Before" is commit `8f5b03f` (the scoring tools on the unchanged measurer). Add
+`--out NEW.jsonl --compare OLD.jsonl` to `eval_measure.py` for the paired room counts. No LLM
+call was made, cost $0. A run through `chatchtg eval --composer areas` with a real model has
+still not been made.

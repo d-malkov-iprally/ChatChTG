@@ -438,10 +438,12 @@ FIXTURE_REACH = 6
 """Pixels from a fixture to the free space of its room: the double outline of a bathtub
 is a band of ink 4 to 5 px wide at 1:200."""
 FIXTURE_MAX_FILL = 0.5
+"""Share of grey wall fill in the ring 4 px around a component, from which it is taken for
+a shaft or a room of its own. A shaft and a small room have wall on three or four sides.
+The ring around a bathtub lies in the tub's own outline, so it holds little fill."""
 FIXTURE_POCKET_SHARE = 0.8
 """The pocket of an opening in a thick wall has a room at each end; a fixture that was
 taken for a pocket has at least this share of the free space around it in one room."""
-"""A shaft has wall fill on all sides; a fixture in a corner on at most two."""
 
 
 def _enclosed_fixtures(
@@ -455,7 +457,8 @@ def _enclosed_fixtures(
     next to it looks like a boundary. Every room has a label, so a free component without
     one is a fixture, a shaft, a wall pocket or an opening. It is taken for a fixture when:
 
-    - its area is 0.05 to 2.5 m² and the short side of its bounding rectangle is 0.5 m or more;
+    - its area is 0.05 to 2.5 m² and the short side of the smallest rectangle around it,
+      at any angle, is 0.5 m or more;
     - free space of one or two rooms lies within 6 px of it (it joins the room that has
       more of that space);
     - less than half of the ring 4 px around it is grey wall fill;
@@ -467,8 +470,12 @@ def _enclosed_fixtures(
     rest are narrower than 0.5 m and cannot be told from opening pockets by these
     features. On the 20 tuning plans at 1:100 it picks 5, all in a room.
 
-    A room whose label was not read has no owner either: when it is this small and has no
-    thick wall around it, it is joined to its neighbour.
+    Limits. The rule does not look at the line between the component and the room:
+    - A room whose label was not read has no owner either. When it is this small and has
+      thin walls without fill, or separators, around it, it is joined to its neighbour.
+    - A component behind an outline that is classed as wall is joined, but the outline of
+      the room is drawn around the largest connected piece only. The area then stays as
+      it was; if the joined piece is larger than the room, the area becomes that of the piece.
     """
     height, width = labels.shape
     owner_of = np.full(len(stats), -1, np.int64)
@@ -672,7 +679,9 @@ def _wall_centre(profile: np.ndarray, steps: np.ndarray, fill: np.ndarray, centr
     wall is known by its grey fill: where 1 px of fill follows within the window, the
     outline is the black run that ends at the fill, and the room edge is its centre,
     measured from the fill side, whatever is drawn in front of it. Profiles without fill
-    (thin walls, separators, openings) and plain walls keep their centre.
+    (thin walls, openings, a separator between two rooms) and plain walls keep their
+    centre. The first line is not examined: a separator that runs 3 to 4 px in front of a
+    filled wall is taken for a fixture line.
     """
     rows = np.arange(len(profile))
     first = (profile >= 40).argmax(axis=1)
