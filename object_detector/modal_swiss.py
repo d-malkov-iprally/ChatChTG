@@ -10,8 +10,12 @@ and ``modal app stop`` do not touch the other one. Both use the volume
     uv run --group train modal volume put chatchtg-object-detector \
         var/swiss-detector/labels.json datasets/swiss-v1/labels.json
     uv run --group train modal run -m object_detector.modal_swiss::build_tiles
-    uv run --group train modal run --detach -m object_detector.modal_swiss::train --run-name swiss-medium-640
-    uv run --group train modal run -m object_detector.modal_swiss::evaluate --run-name swiss-medium-640
+    uv run --group train modal run --detach -m object_detector.modal_swiss::train \
+        --run-name swiss-medium-640 --epochs 15
+    uv run --group train modal run --detach -m object_detector.modal_swiss::train \
+        --run-name swiss-medium-1280 --resolution 1280 --epochs 10 --batch-size 4 \
+        --grad-accum-steps 4 --pretrained runs/swiss-medium-640/checkpoint_best_total.pth
+    uv run --group train modal run -m object_detector.modal_swiss::evaluate --run-name swiss-medium-1280
 
 See README.md and docs/benchmarks/2026-11-15-swiss-symbol-detector.md.
 """
@@ -29,7 +33,7 @@ PNG_DIR = f"{VOLUME_DIR}/raw/swiss-dwellings/png"
 
 _GPU = os.environ.get("OBJECT_DETECTOR_GPU", "L40S")
 TRAIN_GPU = None if _GPU == "none" else _GPU
-PREDICT_GPU = None if _GPU == "none" else os.environ.get("OBJECT_DETECTOR_PREDICT_GPU", "L4")
+PREDICT_GPU = None if _GPU == "none" else os.environ.get("OBJECT_DETECTOR_PREDICT_GPU", "A10G")
 
 MODEL_CLASSES = {
     "nano": "RFDETRNano",
