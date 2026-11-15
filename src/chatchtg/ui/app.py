@@ -29,8 +29,8 @@ def inject_styles() -> None:
         <style>
         :root {
             --canvas: #0d111b;
-            --ink: #172033;
-            --panel: rgba(251, 252, 255, 0.97);
+            --ink: #edf1fa;
+            --panel: rgba(15, 21, 33, 0.78);
             --violet: #9f7aea;
             --violet-deep: #7355c7;
         }
@@ -73,8 +73,8 @@ def inject_styles() -> None:
         }
         div[data-testid="stSegmentedControl"] label p { color: inherit !important; }
         div[data-testid="stSegmentedControl"] label:has(input:checked) {
-            color: #fff !important; background: linear-gradient(135deg, #8064ca, #604aa8) !important;
-            border-color: #bca5fb !important; box-shadow: 0 0 0 1px rgba(188, 165, 251, 0.22);
+            color: #cdbbff !important; background: rgba(115, 85, 199, 0.26) !important;
+            border-color: #a98be9 !important; box-shadow: 0 0 0 1px rgba(188, 165, 251, 0.22);
         }
         [data-testid="stSelectbox"] label,
         [data-testid="stSelectbox"] label p { color: #e9edf7 !important; }
@@ -113,26 +113,35 @@ def inject_styles() -> None:
         .st-key-drawing_canvas [data-testid="stExpander"] summary p { color: #e9edf7 !important; }
 
         .st-key-assistant_panel {
-            padding: 0.95rem; border: 1px solid rgba(207, 213, 228, 0.92); border-radius: 0.5rem;
+            padding: 0.95rem; border: 1px solid rgba(174, 189, 223, 0.64); border-radius: 0.5rem;
             background: var(--panel); box-shadow: 0 13px 32px rgba(0, 0, 0, 0.17);
         }
-        .assistant-heading { display: flex; align-items: center; gap: 0.52rem; margin: 0.1rem 0 0.8rem; padding-bottom: 0.76rem; color: #202943; border-bottom: 1px solid #e2e5ee; font-size: 1.03rem; font-weight: 760; }
-        .assistant-spark { color: var(--violet-deep); font-size: 1.3rem; }
-        .assistant-intro { margin: 0.3rem 0 1rem; color: #6b768a; font-size: 0.88rem; line-height: 1.45; }
-        .question-label { color: #647086; font-size: 0.7rem; font-weight: 760; letter-spacing: 0.09em; text-transform: uppercase; }
-        .assistant-question { margin: 0.35rem 0 0.7rem; padding: 0.66rem 0.75rem; color: #343d54; background: #f0f2f8; border: 1px solid #e0e4ee; border-radius: 0.55rem 0.55rem 0.18rem 0.55rem; font-size: 0.9rem; line-height: 1.4; }
-        .assistant-answer-label { margin: 0.7rem 0 0.32rem; color: #5f4aa5; font-size: 0.7rem; font-weight: 760; letter-spacing: 0.09em; text-transform: uppercase; }
-        .st-key-assistant_panel div[data-testid="stTextArea"] textarea { min-height: 5.2rem; color: #202a3d; background: #f5f7fb; border: 1px solid #dce2ef; border-radius: 0.48rem; }
-        .st-key-assistant_panel div[data-testid="stTextArea"] textarea:focus { border-color: #9a82df; box-shadow: 0 0 0 1px #9a82df; }
-        .st-key-assistant_panel div[data-testid="stFormSubmitButton"] button { width: 100%; color: #fff; background: linear-gradient(135deg, #7d61c8, #5c63bd); border: 0; border-radius: 0.4rem; font-weight: 690; }
-        .st-key-assistant_panel [data-testid="stCaptionContainer"] { color: #727c91; font-size: 0.7rem; }
-        .st-key-assistant_panel .stMarkdown { color: #273148; font-size: 0.91rem; line-height: 1.55; }
+        .assistant-heading { display: flex; align-items: center; gap: 0.52rem; margin: 0.1rem 0 0.8rem; padding-bottom: 0.76rem; color: #f5f7fc; border-bottom: 1px solid rgba(174, 189, 223, 0.3); font-size: 1.03rem; font-weight: 760; }
+        .assistant-spark { color: #c7afff; font-size: 1.3rem; }
+        .assistant-intro { margin: 0.3rem 0 1rem; color: #bdc7d8; font-size: 0.88rem; line-height: 1.45; }
+        .question-label { color: #bdc7d8; font-size: 0.7rem; font-weight: 760; letter-spacing: 0.09em; text-transform: uppercase; }
+        .assistant-question { margin: 0.35rem 0 0.7rem; padding: 0.66rem 0.75rem; color: #f0f3fa; background: rgba(65, 75, 101, 0.34); border: 1px solid rgba(174, 189, 223, 0.3); border-radius: 0.55rem 0.55rem 0.18rem 0.55rem; font-size: 0.9rem; line-height: 1.4; }
+        .assistant-answer-label { margin: 0.7rem 0 0.32rem; color: #cdbbff; font-size: 0.7rem; font-weight: 760; letter-spacing: 0.09em; text-transform: uppercase; }
+        .st-key-assistant_panel div[data-testid="stTextArea"] textarea { min-height: 5.2rem; color: #f3f5fb; background: rgba(8, 13, 23, 0.66); border: 1px solid rgba(174, 189, 223, 0.4); border-radius: 0.48rem; }
+        .st-key-assistant_panel div[data-testid="stTextArea"] textarea::placeholder { color: #9ca9bf; }
+        .st-key-assistant_panel div[data-testid="stTextArea"] textarea:focus { border-color: #a98be9; box-shadow: 0 0 0 1px #a98be9; }
+        .st-key-assistant_panel div[data-testid="stFormSubmitButton"] button { width: 100%; color: #cdbbff; background: rgba(115, 85, 199, 0.24); border: 1px solid #a98be9; border-radius: 0.4rem; font-weight: 690; }
+        .st-key-assistant_panel [data-testid="stCaptionContainer"] { color: #aebbd0; font-size: 0.7rem; }
+        .st-key-assistant_panel .stMarkdown { color: #edf1fa; font-size: 0.91rem; line-height: 1.55; }
 
         .empty-state { padding: 2.6rem 1.5rem; text-align: center; color: #dce3f2; border: 1px dashed rgba(183, 196, 226, 0.42); border-radius: 0.5rem; background: rgba(13, 19, 30, 0.5); }
         .empty-state strong { display: block; margin-bottom: 0.45rem; color: #fff; font-size: 1.05rem; }
         .empty-state span { color: #aebbd0; font-size: 0.9rem; }
-        [data-testid="stFileUploader"] { padding: 0.3rem; background: rgba(255,255,255,0.96); border-radius: 0.48rem; }
-        [data-testid="stSelectbox"] > div > div { background: #fff; border-radius: 0.42rem; }
+        [data-testid="stFileUploader"] { padding: 0.3rem; color: #edf1fa; background: rgba(15, 21, 33, 0.78); border: 1px solid rgba(174, 189, 223, 0.5); border-radius: 0.48rem; }
+        [data-testid="stFileUploader"] label, [data-testid="stFileUploader"] label p,
+        [data-testid="stFileUploader"] small, [data-testid="stFileUploader"] span { color: #edf1fa !important; }
+        [data-testid="stFileUploader"] section { background: rgba(8, 13, 23, 0.48) !important; border-color: rgba(174, 189, 223, 0.36) !important; }
+        [data-testid="stFileUploader"] button { color: #cdbbff !important; background: rgba(115, 85, 199, 0.2) !important; border-color: #a98be9 !important; }
+        [data-testid="stSelectbox"] > div > div,
+        [data-testid="stSelectbox"] [data-baseweb="select"] > div { color: #edf1fa !important; background: rgba(15, 21, 33, 0.78) !important; border-color: rgba(174, 189, 223, 0.5) !important; border-radius: 0.42rem; }
+        [data-testid="stSelectbox"] svg { fill: #cdbbff !important; }
+        div[data-baseweb="popover"] ul { color: #edf1fa !important; background: #161d2b !important; }
+        div[data-baseweb="popover"] li { color: #edf1fa !important; }
 
         @media (max-width: 900px) {
             [data-testid="stMainBlockContainer"] { padding: 0.4rem 0.55rem 0.7rem; }
