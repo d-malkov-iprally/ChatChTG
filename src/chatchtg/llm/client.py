@@ -9,10 +9,21 @@ from pydantic import BaseModel, Field
 from chatchtg.context.types import Context
 
 
+class Location(BaseModel):
+    """One item that the model says it counted."""
+
+    label: str
+    point: tuple[float, float]
+    """``(x, y)`` in pixels of the image that the context carries, origin top left."""
+
+
 class Completion(BaseModel):
     text: str
     model: str
     usage: dict[str, int] = Field(default_factory=dict)
+    locations: list[Location] | None = None
+    """The items of a reply to ``Context.locations``. None: not asked, not supported by the
+    adapter, or not readable. An empty list: the model listed no item."""
 
 
 class LLMClient(Protocol):

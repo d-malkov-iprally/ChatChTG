@@ -11,6 +11,7 @@ from chatchtg.evals.scoring import extract_number
 from chatchtg.extractions.models import Extraction, ImageSize, Item
 from chatchtg.extractions.store import LocalExtractionStore
 from chatchtg.llm.fake import FakeLLM
+from chatchtg.llm.pricing import cost_usd
 from chatchtg.objects import tune
 from chatchtg.objects.counter import (
     PRODUCER,
@@ -251,3 +252,19 @@ def test_an_unknown_object_counter_mode_is_refused(library):
     settings = Settings.from_env({"CHATCHTG_OBJECT_COUNTER": "yes"})
     with pytest.raises(ValueError, match="object counter"):
         build_answer_service(settings, library)
+
+
+def test_an_answer_of_the_object_counter_has_a_price_of_zero():
+    # Without a price, an eval with --max-cost stops at the first answer of the counter.
+    assert cost_usd(OBJECT_COUNTER_MODEL, {}) == 0
+
+
+class BrokenStore:
+    def get(self, document_id, producer, version=None):
+        raise ValueError("not an extraction")
+
+
+def test_detections_that_cannot_be_read_leave_the_question_to_the_llm():
+    counter = DetectorObjectCounter(BrokenStore())
+
+    assert counter.solve("0" * 64, "How many windows are shown in this floor plan?") is None

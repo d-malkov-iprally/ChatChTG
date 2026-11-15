@@ -35,20 +35,28 @@ kind: 47.9%.**
 The baseline runs were replayed with the counter's answer in place of the LLM's answer for
 every question that the counter claims (18 of 100; `--replay`). No LLM call was made.
 
-| Run | Before | After | LLM right on the 18 | Counter right on the 18 |
+**The totals of this table are inflated and are not a result.** 13 of the 18 replaced plans
+are in the detector's training split, and the benchmark sample was not drawn to avoid them.
+Do not compare "After" with the baseline ([ADR 0002](../ADR/0002-plain-llm-as-baseline.md)).
+In the fix-issues run the whole gain of 2 comes from train plans: on the 5 test plans the
+counter fixed one answer and broke one. In the baseline run 1 of the 2 comes from a test plan.
+
+| Run | Before | After (inflated) | LLM right on the 18 | Counter right on the 18 |
 |---|---|---|---|---|
-| `fix-issues-baseline-opus-5-5-100.jsonl` | 81 of 100 | **83 of 100** | 8 | 10 |
-| `baseline-opus-5-5-100.jsonl` | 77 of 100 | **79 of 100** | 8 | 10 |
+| `fix-issues-baseline-opus-5-5-100.jsonl` | 81 of 100 | 83 of 100 | 8 | 10 |
+| `baseline-opus-5-5-100.jsonl` | 77 of 100 | 79 of 100 | 8 | 10 |
 
 - In the fix-issues run the counter fixed 5 answers and broke 3; in the baseline run it fixed 4
   and broke 2.
 - 13 of the 18 replaced plans are in the train split, 5 in test. On the 5 test plans the counter
   was right on 3, the LLM on 3 (fix-issues run) and 2 (baseline run).
 - 18 questions are too few to call a difference of two answers a finding. The split table above
-  is the measurement; the replay only shows that the counter is not worse on this sample.
+  is the measurement. On plans that the detector did not see, the replay has 5 questions:
+that is no finding in either direction.
 - The counter's mistakes in the replay are large plans with many windows (31 of 33, 22 of 23,
   11 of 12) and bathtubs that the high bathtub threshold drops (expected 1, counted 0, twice).
-  The LLM's mistakes on the same plans are larger (12 of 33, 14 or 17 of 23).
+  The LLM's mistakes on the same plans are larger (12 of 33, 14 or 17 of 23). Most of
+  these plans are train plans too.
 
 ### Compared with `evaluate` of the detector branch
 

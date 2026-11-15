@@ -78,7 +78,7 @@ def print_benchmark(result: dict) -> None:
     print("Exact counts of the object counter on the benchmark's CubiCasa5K questions")
     print("(English and Finnish questions together; both have the same answer on a plan).")
     header = "".join(f"{split:>16}" for split in SPLITS)
-    print(f"{'kind':<13}{header}{'all':>16}")
+    print(f"{'kind':<13}{header}{'all (inflated)':>16}")
     totals: dict[str, Counter[str]] = defaultdict(Counter)
     for kind in [*KINDS, "ALL"]:
         line = f"{kind:<13}"
@@ -102,7 +102,8 @@ def print_benchmark(result: dict) -> None:
         "train: the detector was trained on these plans (and on the few valid and test plans "
         "whose image is also a train plan, counted here), so this column is inflated. "
         "valid: the minimum scores were chosen on these plans. "
-        "test: neither; this is the number to quote."
+        "test: neither; this is the number to quote. "
+        "all: mostly train plans, so it is inflated too and is not a result."
     )
     missing = result["missing"]
     if missing:
