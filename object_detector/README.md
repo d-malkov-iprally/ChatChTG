@@ -31,6 +31,7 @@ uv run --group train modal run -m object_detector.modal_app::download       # Cu
 uv run --group train modal run -m object_detector.modal_app::build_dataset  # labels to a COCO dataset
 uv run --group train modal run --detach -m object_detector.modal_app::train --run-name large-1024
 uv run --group train modal run -m object_detector.modal_app::evaluate --run-name large-1024
+uv run --group train modal run -m object_detector.modal_predict::predict_all --run-name large-1024
 ```
 
 - `download` does nothing if the data is on the volume.
@@ -38,6 +39,7 @@ uv run --group train modal run -m object_detector.modal_app::evaluate --run-name
 - `train` has the options `--size` (nano, small, medium, large), `--resolution` (a multiple of 32), `--epochs`, `--batch-size`, `--grad-accum-steps` and `--limit`. With `--limit 200 --epochs 1` it trains on 200 images, as a quick check of the whole pipeline.
 - `train` with the name of a run that was stopped continues that run from its last checkpoint. Modal can stop a GPU container at any time, and it then starts the function again by itself.
 - `--detach` keeps the run alive when the terminal closes. Read its output with `uv run --group train modal app logs -f chatchtg-object-detector`. Stop it with `uv run --group train modal app stop chatchtg-object-detector`.
+- `predict_all` runs a checkpoint of a run over every plan of CubiCasa5K (all 5,000, in the split of CubiCasa5K, also the plans that `build_dataset` skipped) and writes every detection with a score of at least `--min-score` (0.05) to `predictions/<run>/detections.jsonl`, with the split and the SHA-256 of each image. It runs in chunks of 250 plans on L4 GPUs; set `OBJECT_DETECTOR_PREDICT_GPU=A10G` (or `T4`, `L40S`) when L4 has no capacity. `--limit 20` is a quick check. The app counts from these detections: see "Object counting" in the main README.
 - `evaluate` selects the minimum score that gives the best counts on the validation split, then scores the test split with that value: for each class, on how many plans the count is exactly right, and the mean error of the count.
 
 ## Where the results are
@@ -49,6 +51,7 @@ All files are on the Modal volume `chatchtg-object-detector`:
 | `raw/cubicasa5k/` | the extracted dataset |
 | `datasets/cubicasa-v1/` | `train`, `valid`, `test` with `_annotations.coco.json` and the images, `stats.json`, `label_check.json` |
 | `runs/<run>/` | `checkpoint_best_total.pth`, `last.ckpt`, `scores.json`, `predictions_test.json`, `samples/` |
+| `predictions/<run>/` | `detections.jsonl`, `settings.json`, `chunks/` of `predict_all` |
 
 Download the checkpoint of a run:
 
@@ -74,5 +77,6 @@ uv run --group train modal volume get chatchtg-object-detector runs/large-1024/c
 | `dataset.py` | the COCO dataset |
 | `scoring.py` | scores of counts against the labels and against the benchmark |
 | `modal_app.py` | the Modal functions |
+| `modal_predict.py` | the batch prediction over all plans, in its own Modal app `chatchtg-object-predict` |
 
 The tests are in `tests/test_object_detector.py`. They need no Modal account and no GPU.
