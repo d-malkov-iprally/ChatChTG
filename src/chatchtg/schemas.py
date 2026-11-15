@@ -17,7 +17,11 @@ class AnswerRequest(BaseModel):
 class AnswerResponse(BaseModel):
     text: str
     composer: str
-    """Name and version of the composer that built the context, e.g. ``baseline@1``."""
+    """Name and version of the composer that built the context, e.g. ``baseline@1``. A
+    composer that delegates names its parts too: ``combined@1+areas@2+room-conventions@3``."""
+    context_composer: str | None = None
+    """When the composer delegates: name and version of the part that built this context,
+    e.g. ``areas@2``. None for a composer that builds its contexts itself."""
     model: str
     """Model name reported by the LLM client."""
     method: str | None = None

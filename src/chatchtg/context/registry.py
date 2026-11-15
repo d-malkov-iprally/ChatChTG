@@ -2,11 +2,21 @@
 
 from chatchtg.context.areas import AreaComposer
 from chatchtg.context.baseline import BaselineComposer
+from chatchtg.context.combined import CombinedComposer
 from chatchtg.context.composer import Composer
 from chatchtg.context.room_conventions import RoomConventionsComposer
 
+_AREAS = AreaComposer()
+_ROOM_CONVENTIONS = RoomConventionsComposer()
+
 COMPOSERS: dict[str, Composer] = {
-    c.name: c for c in (BaselineComposer(), AreaComposer(), RoomConventionsComposer())
+    c.name: c
+    for c in (
+        BaselineComposer(),
+        _AREAS,
+        _ROOM_CONVENTIONS,
+        CombinedComposer(areas=_AREAS, room_conventions=_ROOM_CONVENTIONS),
+    )
 }
 
 

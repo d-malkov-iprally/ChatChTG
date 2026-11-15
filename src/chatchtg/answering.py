@@ -9,7 +9,7 @@ from typing import Protocol
 
 from pydantic import BaseModel
 
-from chatchtg.context.composer import Composer, ComposerInput, composer_id
+from chatchtg.context.composer import Composer, ComposerInput, composer_id, context_composer
 from chatchtg.context.types import Context
 from chatchtg.documents.library import DocumentLibrary
 from chatchtg.llm.client import Completion, LLMClient
@@ -59,9 +59,9 @@ class AnswerService:
     def answer_traced(self, request: AnswerRequest) -> AnswerTrace:
         document = self._library.get(request.document_id)
         content = self._library.content(document)
-        context = self._composer.compose(
-            ComposerInput(document=document, content=content, message=request.message)
-        )
+        composer_input = ComposerInput(document=document, content=content, message=request.message)
+        context = self._composer.compose(composer_input)
+        part = context_composer(self._composer, composer_input)
         finding = None
         if self._room_counter is not None:
             finding = self._room_counter.solve(content, request.message)
@@ -73,6 +73,7 @@ class AnswerService:
         response = AnswerResponse(
             text=completion.text,
             composer=composer_id(self._composer),
+            context_composer=composer_id(part) if part is not None else None,
             model=completion.model,
             method=finding.method if finding else None,
             evidence=finding.evidence if finding else [],

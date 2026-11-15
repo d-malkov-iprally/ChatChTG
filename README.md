@@ -110,6 +110,18 @@ uv run python scripts/eval_membership.py        # the aggregation rules and apar
 
 The DXF files are used only to score and to explain errors, never to answer ([ADR 0003](docs/ADR/0003-floor-plans-only.md)). Results are in [docs/benchmarks](docs/benchmarks/).
 
+### Combined composer
+
+The `combined` composer gets the gains of `areas` and `room-conventions` together. It sends an area question (one that the parser in `areas/questions.py` reads) to the `areas` composer and every other question to `room-conventions`, which adds the conventions to a room count on a Finnish plan and builds the baseline context for anything else. It returns the context of the composer it chose unchanged, so it changes when they change. The two change disjoint sets of questions: on the 123,098 benchmark questions no question is read by both parsers.
+
+```sh
+CHATCHTG_COMPOSER=combined uv run chatchtg serve
+uv run chatchtg eval data/floorplans --questions questions-subset.jsonl --composer combined
+uv run python scripts/route_questions.py data/floorplans/questions.jsonl   # where each question goes, no LLM
+```
+
+Its id names the versions of its parts, `combined@1+areas@2+room-conventions@3`, and each response and eval row has `context_composer`: the part that built that context, for example `areas@2`. `scripts/replay_composer.py` scores a composer from earlier eval runs whose rows have the same context, without an LLM call. The default stays `baseline`, the reference of [ADR 0002](docs/ADR/0002-plain-llm-as-baseline.md). Results: [docs/benchmarks/2026-11-15-combined-composer.md](docs/benchmarks/2026-11-15-combined-composer.md).
+
 ### Judge
 
 The eval scores an answer with a rule: it takes the last number in the answer and compares it with the reference answer ([ADR 0002](docs/ADR/0002-plain-llm-as-baseline.md)). The last number is not always the answer: in "13 windows, 2 of them on floor 1" the rule reads 2. Add `--judge` to also have a small model read each answer:
@@ -169,7 +181,7 @@ Set these in the shell or in `.env`:
 |---|---|---|
 | `CHATCHTG_DATA_ROOT` | `data` | root of the downloaded datasets |
 | `CHATCHTG_STATE_DIR` | `var` | where state is written |
-| `CHATCHTG_COMPOSER` | `baseline` | context composer used by the app: `baseline`, `areas` or `room-conventions` |
+| `CHATCHTG_COMPOSER` | `baseline` | context composer used by the app: `baseline`, `areas`, `room-conventions` or `combined` (the two before it together, see [Combined composer](#combined-composer)) |
 | `CHATCHTG_ROOM_COUNTER` | `off` | `confident`: code answers a room-count question when it is as accurate as the LLM; `always`: code answers every room-count question; see [Room counting](#room-counting) |
 | `CHATCHTG_LLM_PROVIDER` | `fake` | LLM adapter: `fake`, `claude` or `modal` |
 | `CHATCHTG_ANTHROPIC_API_KEY` | not set | this project's Anthropic key, used instead of `ANTHROPIC_API_KEY` |
