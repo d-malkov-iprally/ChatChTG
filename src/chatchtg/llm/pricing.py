@@ -11,6 +11,7 @@ PRICES: dict[str, tuple[float, float]] = {
     "fake": (0.0, 0.0),
     "fake-judge": (0.0, 0.0),
     "room-counter": (0.0, 0.0),  # an answer made in code, without an LLM call
+    "area-pipeline": (0.0, 0.0),  # an answer made in code, without an LLM call
     "claude-fable-5-2": (8.0, 40.0),
     "claude-opus-5-5": (4.0, 20.0),
     "claude-opus-5": (5.0, 25.0),

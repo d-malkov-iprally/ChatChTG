@@ -96,7 +96,7 @@ uv run chatchtg eval data/floorplans --questions questions-subset.jsonl --compos
 - **Areas** (`areas/measure.py`): a printed area is used where there is one. Otherwise the room is measured: its outline is found from the drawn lines and each edge is placed at the centre of its line, to a fraction of a pixel.
 - **Answer** (`areas/questions.py`): the question is parsed (English, German, French, Italian) and the areas are added up in code.
 
-The LLM gets the result as text, without the image, and states it. It gets the image and the room table when the pipeline cannot answer. Other questions are composed as in the baseline. The first question on a drawing takes several seconds of CPU for the OCR; later questions on the same drawing reuse the analysis.
+When the pipeline is confident of its result, code states the answer and no LLM is called. The text names the rooms that were added up, says for each whether its area was printed on the plan or measured from the drawn lines, adds a caution when a measured area comes from a plan at 1:200 or coarser or when a total is from a plan whose room numbering has a gap, and ends with `Answer: <value> m²`. It is in English for a question in any language. The response's model is then `area-pipeline`, and the answer costs nothing. The LLM gets the image and the room table when the pipeline cannot answer. Other questions are composed as in the baseline. The first question on a drawing takes several seconds of CPU for the OCR; later questions on the same drawing reuse the analysis.
 
 To score the pipeline without any LLM call:
 
@@ -107,6 +107,15 @@ uv run python scripts/eval_areas.py --plans 100 # answers the area questions of 
 uv run python scripts/eval_labels.py 20 20      # the label reader alone
 uv run python scripts/eval_membership.py        # the aggregation rules and apartment membership alone
 ```
+
+To score the answers that code states, run the eval with the fake provider and read the result file:
+
+```sh
+CHATCHTG_LLM_PROVIDER=fake uv run chatchtg eval data/floorplans --questions questions-subset.jsonl --composer areas --out var/eval-runs/areas-fake.jsonl
+uv run python scripts/eval_area_statement.py --results var/eval-runs/areas-fake.jsonl   # add --compare <another run> for the same questions in that run
+```
+
+The script counts only the rows with the model `area-pipeline`. In a run with the fake provider every other row is answered by the fake LLM and is not a result: ignore the accuracy that `chatchtg eval` prints for such a run.
 
 The DXF files are used only to score and to explain errors, never to answer ([ADR 0003](docs/ADR/0003-floor-plans-only.md)). Results are in [docs/benchmarks](docs/benchmarks/).
 
@@ -217,7 +226,7 @@ blobs.py   metadata.py
 - **Metadata storage** (`documents/metadata.py`): one SQLite record per document, with free-form JSON attributes.
 - **Extraction storage** (`extractions/`): the facts that a producer derived from a drawing (rooms, objects, their geometry and measures), one JSON file per drawing and producer version in `var/metadata/`. The format is in [docs/metadata-format.md](docs/metadata-format.md). Nothing reads or writes it yet.
 - **Room counter** (`rooms/`): optional. `AnswerService` asks it first; when it is not confident, or the question is not a room count, the LLM answers. See [Room counting](#room-counting).
-- **Context composer** (`context/`): a pure function `(document record, bytes, message) -> Context`. It never calls an LLM. To add a strategy, write a composer and list it in `context/registry.py`.
+- **Context composer** (`context/`): a pure function `(document record, bytes, message) -> Context`. It never calls an LLM. To add a strategy, write a composer and list it in `context/registry.py`. A context can carry an answer that code computed and stated (`Context.computed`); `AnswerService` then uses that text and does not call the LLM. The `areas` composer does this, see [Area questions](#area-questions).
 - **LLM** (`llm/`): `LLMClient.complete(Context) -> Completion`. To add a provider, write one adapter and add a branch to `build_llm`.
   - `fake` (`llm/fake.py`): a deterministic stand-in for tests and offline runs.
   - `claude` (`llm/claude.py`): sends the system prompt and one user message (the images and text, in order) to the Anthropic Messages API. The completion records the model that served the request and the token usage. If the model declines a request, the API retries it on a fallback model; if that also declines, the answer says so and the run continues.
