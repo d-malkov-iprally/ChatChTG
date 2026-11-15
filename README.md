@@ -220,7 +220,12 @@ uv run python -m chatchtg.objects.importer var/detections/detections.jsonl data/
 # Choose the minimum scores on the valid split; score per split; replay eval runs
 uv run python -m chatchtg.objects.tune data/floorplans/questions.jsonl var/detections/detections.jsonl
 uv run python -m chatchtg.objects.report data/floorplans/questions.jsonl --replay var/eval-runs/<run>.jsonl
+
+# Compare with every Opus answer to these questions in existing result files (no LLM call)
+uv run python -m chatchtg.objects.report data/floorplans/questions.jsonl --llm var/eval-runs/*.jsonl
 ```
+
+Each detector run is its own version of the producer `rfdetr-large-1024`, with its own minimum scores (`THRESHOLDS_BY_VERSION`); `PRODUCER_VERSION` in `objects/counter.py` is the one the app reads. `importer --version N` stores a run as version N and `report --version N` scores it. Version 1 is `large-1024`, the one in use; version 2 (`large-1536-ft`) was no better on the test split.
 
 ## Architecture
 
