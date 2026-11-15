@@ -322,14 +322,14 @@ def render_workspace(document, library, answer_service, demo_drawing=None) -> No
                 question = questions[pending[1]]
                 keep_answer(answer_service, document, question.text, question.reference)
             if questions:
-                # The trail of the demo: a click asks the question, a tick marks the ones asked.
+                # The trail of the demo: a click asks the question, a question that was asked changes colour.
                 asked = st.session_state.get("asked", set())
                 st.markdown('<div class="question-label">Demo questions</div>', unsafe_allow_html=True)
                 with st.container(key="question_chips", horizontal=True, border=False):
                     for index, question in enumerate(questions):
                         done = (document.id, question.text) in asked
                         st.button(
-                            f"{'✓' if done else index + 1} · {question.label}",
+                            f"{index + 1} · {question.label}",
                             key=f"chip-{document.id[:12]}-{index}",
                             help=question.text,
                             type="primary" if done else "secondary",

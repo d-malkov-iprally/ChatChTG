@@ -49,7 +49,7 @@ uv run pytest
 
 ### Demo drawings
 
-The app opens on eight hand-picked drawings of the floor-plan benchmark: four Swiss plans and four Finnish plans. They are shown as cards above the workspace, and a registered drawing of the set has a ★ in the list. Each has its questions as chips next to the drawing: a click asks the question, a tick marks the ones already asked, and the benchmark's answer is shown under the answer to compare with.
+The app opens on eight hand-picked drawings of the floor-plan benchmark: four Swiss plans and four Finnish plans. They are shown as cards above the workspace, and a registered drawing of the set has a ★ in the list. Each has its questions as chips next to the drawing: a click asks the question, a question that was asked turns green, and the benchmark's answer is shown under the answer to compare with.
 
 ```sh
 CHATCHTG_COMPOSER=combined CHATCHTG_ROOM_COUNTER=confident CHATCHTG_OBJECT_COUNTER=detections uv run chatchtg serve

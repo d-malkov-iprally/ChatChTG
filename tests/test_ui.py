@@ -241,7 +241,8 @@ def test_app_opens_on_the_demo_drawings_and_a_chip_asks_its_question(tmp_path, m
     assert not app.exception
     assert any('class="assistant-question">How many windows on plan 0?<' in block.value for block in app.markdown)
     assert any("Benchmark answer: 3" in block.value for block in app.caption)
-    assert "✓ · Windows" in labels(app) and "1 · Doors" in labels(app)      # the trail marks what was asked
+    kinds = {button.label: button.proto.type for button in app.button}
+    assert kinds["2 · Windows"] == "primary" and kinds["1 · Doors"] == "secondary"   # the trail marks what was asked
 
 
 def test_app_changes_the_questions_with_the_demo_drawing(tmp_path, monkeypatch):
