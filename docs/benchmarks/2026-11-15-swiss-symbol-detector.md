@@ -24,7 +24,8 @@ benchmark answer counts objects that are not visible (see "Doors and windows" be
 ## The DXF files are labels, not answers
 
 Each Swiss sheet has a DXF twin. Here it is used for two things only: to make the training
-labels, and to score. The detector never reads it, and nothing at answer time does (ADR 0003).
+labels, and to score. The detector never reads it, and nothing at answer time does. No ADR covers the use of the DXF
+files as training labels yet; it needs one before the detector is used to answer.
 This is the same use that the Finnish detector makes of the SVG labels of CubiCasa5K. The split
 keeps it honest: the plans that are scored are never trained on, and the minimum score of each
 class is chosen on the valid plans, not on the test plans.
@@ -81,10 +82,19 @@ least half of the smaller box).
 - **Doors.** The detector has learnt to give two boxes where the training labels had two stacked
   doors, so it often matches the answer (129 of 163 test plans). Every test plan with a wrong
   door count has stacked duplicates.
-- **Windows.** The detector gives one box for a stacked pair. Against the visible windows (the
+- **Windows.** The scoring gives one box for a stacked pair, whatever the model finds: the
+  two labels of a stacked pair have the same box, and the step that joins the tiles
+  (`join_tiles`) keeps one of two boxes of a class that overlap by half or more. So a plan
+  with a stacked window can never get the exact count of the answer (37 of the 163 test
+  plans). This is a cap of the code, not a finding about the model. Against the visible windows (the
   answer minus the stacked duplicates) it is exact on 154 of 163 test plans (94.5%), and on 140
   of 150 valid plans. Against the answer it is exact on 121 of 163. Of the 42 test plans with a
   wrong window count, 36 have stacked duplicates.
+
+The figures of this section (the duplicate counts and the scores against the visible
+windows) were made with one-off scripts that are not in the repository. So were the share of
+plans where counting arcs works, the centring from the DXF extents, the comparison with
+`room_truth`, the diagnosis of the first run and the comparison with the LLM below.
 
 No image-only method can see a stacked duplicate. It can only guess them from a pattern. The
 LLM baseline has the same limit.
