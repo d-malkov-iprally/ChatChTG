@@ -392,3 +392,10 @@ def test_positions_are_left_out_when_the_endpoint_resized_the_image():
     reply = {"items": [{"label": "WC", "x": 500, "y": 300}], "answer": "1 toilet"}
     completion = _llm(_json_reply(reply, usage=usage))[0].complete(_image_context(2480, 1753))
     assert (completion.text, completion.locations) == ("1 toilet", None)
+
+
+def test_an_integer_too_large_for_a_float_is_a_bad_item_and_not_a_crash():
+    text = '{"items": [{"label": "door", "x": 1%s, "y": 5}, {"label": "door", "x": 7, "y": 8}], "answer": "2 doors"}' % ("0" * 400)
+    completion = _llm(_json_reply(text))[0].complete(LOCATED)
+    assert completion.text == "2 doors"
+    assert completion.locations == [Location(label="door", point=(7, 8))]

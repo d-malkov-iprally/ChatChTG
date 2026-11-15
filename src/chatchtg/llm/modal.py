@@ -275,7 +275,12 @@ def to_stored_pixels(
 
 
 def _is_number(value: Any) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    try:
+        return math.isfinite(float(value))
+    except OverflowError:  # an integer too large for a float
+        return False
 
 
 def _json_object(text: str) -> dict[str, Any] | None:
