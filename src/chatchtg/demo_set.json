@@ -1,0 +1,273 @@
+[
+  {
+    "path": "floorplans/data/swiss_dwellings/site10308_bldg14924_floor39248.png",
+    "title": "Swiss · 2 apartments",
+    "note": "Areas measured from the drawn lines",
+    "questions": [
+      {
+        "label": "Apartments",
+        "text": "How many apartments (residential units) are shown on this floor plan?",
+        "reference": "2"
+      },
+      {
+        "label": "Floor area",
+        "text": "What is the total net floor area in m² of all numbered indoor rooms on this floor (excluding balconies, loggias, terraces and other outdoor spaces, shafts and voids)?",
+        "reference": "136.26 m²"
+      },
+      {
+        "label": "Area of apartment A",
+        "text": "What is the net floor area of apartment A in m², summing all its rooms except balconies, loggias, terraces and other outdoor spaces?",
+        "reference": "62.89 m²"
+      },
+      {
+        "label": "All 'Schlafzimmer' rooms",
+        "text": "What is the total net area in m² of all rooms labelled 'Schlafzimmer' on this floor?",
+        "reference": "54.46 m²"
+      },
+      {
+        "label": "Room 1.14 (Schlafzimmer)",
+        "text": "What is the net floor area of room 1.14 ('Schlafzimmer') in m²?",
+        "reference": "12.06 m²"
+      }
+    ]
+  },
+  {
+    "path": "floorplans/data/swiss_dwellings/site1030_bldg2121_floor47586.png",
+    "title": "Swiss · printed areas",
+    "note": "Areas printed on the plan and measured, together",
+    "questions": [
+      {
+        "label": "Apartments",
+        "text": "How many apartments (residential units) are shown on this floor plan?",
+        "reference": "4"
+      },
+      {
+        "label": "Floor area",
+        "text": "What is the total net floor area in m² of all numbered indoor rooms on this floor (excluding balconies, loggias, terraces and other outdoor spaces, shafts and voids)?",
+        "reference": "340.96 m²"
+      },
+      {
+        "label": "Area of apartment B",
+        "text": "What is the net floor area of apartment B in m², summing all its rooms except balconies, loggias, terraces and other outdoor spaces?",
+        "reference": "85.0 m²"
+      },
+      {
+        "label": "All 'Zimmer' rooms",
+        "text": "What is the total net area in m² of all rooms labelled 'Zimmer' on this floor?",
+        "reference": "87.99 m²"
+      },
+      {
+        "label": "Room 2.14 (Zimmer)",
+        "text": "What is the net floor area of room 2.14 ('Zimmer') in m²?",
+        "reference": "12.83 m²"
+      },
+      {
+        "label": "Room 2.31 (Korridor)",
+        "text": "What is the net floor area of room 2.31 ('Korridor') in m²?",
+        "reference": "12.21 m²"
+      }
+    ]
+  },
+  {
+    "path": "floorplans/data/swiss_dwellings/site1021_bldg2101_floor9477.png",
+    "title": "Swiss · large floor",
+    "note": "Areas measured from the drawn lines",
+    "questions": [
+      {
+        "label": "Apartments",
+        "text": "How many apartments (residential units) are shown on this floor plan?",
+        "reference": "4"
+      },
+      {
+        "label": "Floor area",
+        "text": "What is the total net floor area in m² of all numbered indoor rooms on this floor (excluding balconies, loggias, terraces and other outdoor spaces, shafts and voids)?",
+        "reference": "349.5 m²"
+      },
+      {
+        "label": "Area of apartment B",
+        "text": "What is the net floor area of apartment B in m², summing all its rooms except balconies, loggias, terraces and other outdoor spaces?",
+        "reference": "80.55 m²"
+      },
+      {
+        "label": "All 'Zimmer' rooms",
+        "text": "What is the total net area in m² of all rooms labelled 'Zimmer' on this floor?",
+        "reference": "190.44 m²"
+      },
+      {
+        "label": "Room 0.26 (Korridor)",
+        "text": "What is the net floor area of room 0.26 ('Korridor') in m²?",
+        "reference": "6.37 m²"
+      },
+      {
+        "label": "Room 0.10 (Zimmer)",
+        "text": "What is the net floor area of room 0.10 ('Zimmer') in m²?",
+        "reference": "12.13 m²"
+      }
+    ]
+  },
+  {
+    "path": "floorplans/data/swiss_dwellings/site1036_bldg2128_floor9886.png",
+    "title": "Swiss · small block",
+    "note": "Areas measured from the drawn lines",
+    "questions": [
+      {
+        "label": "Apartments",
+        "text": "How many apartments (residential units) are shown on this floor plan?",
+        "reference": "2"
+      },
+      {
+        "label": "Floor area",
+        "text": "What is the total net floor area in m² of all numbered indoor rooms on this floor (excluding balconies, loggias, terraces and other outdoor spaces, shafts and voids)?",
+        "reference": "168.44 m²"
+      },
+      {
+        "label": "Area of apartment B",
+        "text": "What is the net floor area of apartment B in m², summing all its rooms except balconies, loggias, terraces and other outdoor spaces?",
+        "reference": "78.63 m²"
+      },
+      {
+        "label": "All 'Zimmer' rooms",
+        "text": "What is the total net area in m² of all rooms labelled 'Zimmer' on this floor?",
+        "reference": "115.27 m²"
+      },
+      {
+        "label": "Room 2.13 (Küche)",
+        "text": "What is the net floor area of room 2.13 ('Küche') in m²?",
+        "reference": "8.55 m²"
+      },
+      {
+        "label": "Room 2.09 (Zimmer)",
+        "text": "What is the net floor area of room 2.09 ('Zimmer') in m²?",
+        "reference": "15.22 m²"
+      }
+    ]
+  },
+  {
+    "path": "floorplans/data/cubicasa5k/high_quality_architectural-1718.png",
+    "title": "Finnish · 2 storeys",
+    "note": "Objects counted by the symbol detector",
+    "questions": [
+      {
+        "label": "Windows",
+        "text": "How many windows are shown on this floor plan?",
+        "reference": "12"
+      },
+      {
+        "label": "Doors",
+        "text": "How many doors are shown on this floor plan? Count doorways fitted with a door; open doorways without a door leaf do not count.",
+        "reference": "12"
+      },
+      {
+        "label": "Toilets",
+        "text": "How many toilet bowls (WC seats) are drawn on this floor plan?",
+        "reference": "2"
+      },
+      {
+        "label": "Sinks",
+        "text": "How many sinks and wash basins (kitchen and bathroom combined; a double-bowl sink counts as one) are drawn on this floor plan?",
+        "reference": "3"
+      },
+      {
+        "label": "Showers and baths",
+        "text": "How many showers and bathtubs are drawn on this floor plan in total?",
+        "reference": "1"
+      }
+    ]
+  },
+  {
+    "path": "floorplans/data/cubicasa5k/high_quality_architectural-141.png",
+    "title": "Finnish · house 1",
+    "note": "Objects counted by the symbol detector",
+    "questions": [
+      {
+        "label": "Windows",
+        "text": "How many windows are shown on this floor plan?",
+        "reference": "10"
+      },
+      {
+        "label": "Doors",
+        "text": "How many doors are shown on this floor plan? Count doorways fitted with a door; open doorways without a door leaf do not count.",
+        "reference": "11"
+      },
+      {
+        "label": "Toilets",
+        "text": "How many toilet bowls (WC seats) are drawn on this floor plan?",
+        "reference": "2"
+      },
+      {
+        "label": "Sinks",
+        "text": "How many sinks and wash basins (kitchen and bathroom combined; a double-bowl sink counts as one) are drawn on this floor plan?",
+        "reference": "3"
+      },
+      {
+        "label": "Showers and baths",
+        "text": "How many showers and bathtubs are drawn on this floor plan in total?",
+        "reference": "2"
+      }
+    ]
+  },
+  {
+    "path": "floorplans/data/cubicasa5k/colorful-9448.png",
+    "title": "Finnish · coloured",
+    "note": "Objects counted by the symbol detector",
+    "questions": [
+      {
+        "label": "Windows",
+        "text": "How many windows are shown on this floor plan?",
+        "reference": "6"
+      },
+      {
+        "label": "Doors",
+        "text": "How many doors are shown on this floor plan? Count doorways fitted with a door; open doorways without a door leaf do not count.",
+        "reference": "9"
+      },
+      {
+        "label": "Toilets",
+        "text": "How many toilet bowls (WC seats) are drawn on this floor plan?",
+        "reference": "1"
+      },
+      {
+        "label": "Sinks",
+        "text": "How many sinks and wash basins (kitchen and bathroom combined; a double-bowl sink counts as one) are drawn on this floor plan?",
+        "reference": "3"
+      },
+      {
+        "label": "Showers and baths",
+        "text": "How many showers and bathtubs are drawn on this floor plan in total?",
+        "reference": "2"
+      }
+    ]
+  },
+  {
+    "path": "floorplans/data/cubicasa5k/high_quality-20174.png",
+    "title": "Finnish · house 2",
+    "note": "Objects counted by the symbol detector",
+    "questions": [
+      {
+        "label": "Windows",
+        "text": "How many windows are shown on this floor plan?",
+        "reference": "5"
+      },
+      {
+        "label": "Doors",
+        "text": "How many doors are shown on this floor plan? Count doorways fitted with a door; open doorways without a door leaf do not count.",
+        "reference": "10"
+      },
+      {
+        "label": "Toilets",
+        "text": "How many toilet bowls (WC seats) are drawn on this floor plan?",
+        "reference": "2"
+      },
+      {
+        "label": "Sinks",
+        "text": "How many sinks and wash basins (kitchen and bathroom combined; a double-bowl sink counts as one) are drawn on this floor plan?",
+        "reference": "3"
+      },
+      {
+        "label": "Showers and baths",
+        "text": "How many showers and bathtubs are drawn on this floor plan in total?",
+        "reference": "1"
+      }
+    ]
+  }
+]

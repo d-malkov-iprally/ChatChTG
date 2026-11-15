@@ -47,6 +47,20 @@ uv run chatchtg eval data/floorplans --questions questions-subset.jsonl --sample
 uv run pytest
 ```
 
+### Demo drawings
+
+The app opens on eight hand-picked drawings of the floor-plan benchmark: four Swiss plans and four Finnish plans. They are shown as cards above the workspace, and a registered drawing of the set has a ★ in the list. Each has its questions as chips next to the drawing: a click asks the question, a question that was asked turns green, and the benchmark's answer is shown under the answer to compare with.
+
+```sh
+CHATCHTG_COMPOSER=combined CHATCHTG_ROOM_COUNTER=confident CHATCHTG_OBJECT_COUNTER=detections uv run chatchtg serve
+```
+
+- The set is `src/chatchtg/demo_set.json`: for each drawing its path below `CHATCHTG_DATA_ROOT`, a title, a note, and the questions with a label for the chip and the benchmark's answer. To change the demo, edit this file.
+- The drawings are in `data/floorplans` (see [Floor-plan benchmark](#floor-plan-benchmark)). The app registers them when it starts. A drawing whose file is missing is left out; with none of them the app has no demo cards and opens on the upload.
+- The set was picked for the settings above. With them, code answers all 43 questions and the app draws the evidence: the areas and apartment counts of the Swiss plans, the object counts of the Finnish plans. Checked on 2026-11-15 through `AnswerService` with the fake provider: every answer was made in code and equal to the benchmark's answer (areas within 2%). The Finnish counts need the stored detections of the drawings (see [Object counting](#object-counting)).
+- Every plan of the set is a held-out plan of the code path that answers it, so no answer of the demo comes from a detector on a plan it was trained on. The set is still cherry-picked: it shows what works, and it is not a score.
+- With other settings a chip sends its question to the LLM, as a typed question does. With a real provider that is billed.
+
 ### Detection demo
 
 A separate Streamlit page to try open-vocabulary detectors on a drawing: select an image, name the objects to find ("window, door"), and see the boxes and the count of each label.
