@@ -158,3 +158,27 @@ def test_app_shows_the_question_with_the_answer(tmp_path, monkeypatch):
     app.button[1].click().run()
 
     assert any(block.value == "Question: How many doors?" for block in app.caption)
+
+
+def test_app_draws_the_marks_of_the_llm_and_warns_when_the_count_differs(tmp_path, monkeypatch):
+    from chatchtg.llm.client import Location
+    from chatchtg.llm.fake import FakeLLM
+
+    monkeypatch.setenv("CHATCHTG_DATA_ROOT", str(tmp_path / "data"))
+    monkeypatch.setenv("CHATCHTG_STATE_DIR", str(tmp_path / "state"))
+    monkeypatch.setenv("CHATCHTG_COMPOSER", "located")
+    monkeypatch.setattr(
+        "chatchtg.wiring.build_llm",
+        lambda *args, **kwargs: FakeLLM(
+            reply="There are 3 doors.", locations=[Location(label="door", point=(10, 10))]
+        ),
+    )
+    build_library(Settings.from_env()).add_upload(real_png(), "plan.png")
+
+    app = ask(AppTest.from_file(APP).run(), "How many doors?")
+
+    assert not app.exception
+    assert any("3, but 1 positions" in block.value for block in app.warning)
+    assert any("counted by the LLM" in block.value for block in app.caption)
+    assert any("Evidence on plan.png" in caption for image in app.image for caption in image.captions)
+    assert app.table[0].value.to_dict("records")[0]["Item"] == "door 1"
