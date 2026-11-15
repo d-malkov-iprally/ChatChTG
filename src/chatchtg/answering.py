@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from chatchtg.context.composer import Composer, ComposerInput, composer_id
 from chatchtg.context.types import Context
 from chatchtg.documents.library import DocumentLibrary
+from chatchtg.evidence import METHOD_WORDS
 from chatchtg.llm.client import Completion, LLMClient
 from chatchtg.rooms.router import Finding
 from chatchtg.schemas import AnswerRequest, AnswerResponse
@@ -76,8 +77,10 @@ class AnswerService:
             text=completion.text,
             composer=composer_id(self._composer),
             model=completion.model,
-            method=finding.method if finding else None,
-            evidence=finding.evidence if finding else [],
+            # The evidence of one producer: the room counter when its count is the answer,
+            # otherwise what the composer knows about a result that the context states.
+            method=finding.method if finding else context.method,
+            evidence=finding.evidence if finding else context.evidence,
         )
         return AnswerTrace(response=response, context=context, completion=completion)
 
@@ -104,12 +107,6 @@ _SUBJECTS = {
     "storeys": "floors (storeys)",
     "apartments": "apartments",
 }
-_METHODS = {
-    "labels": "counted from the labels printed on the drawing",
-    "shapes": "counted from the shapes on the drawing",
-    "labels+shapes": "counted from the printed labels and confirmed by the shapes",
-    "usual": "not counted on the drawing: this is the usual number for such a plan",
-}
 
 
 def _finding_text(finding: Finding) -> str:
@@ -118,4 +115,4 @@ def _finding_text(finding: Finding) -> str:
     subject = f"rooms labelled '{question.label}'" if question.kind == "label" else _SUBJECTS[question.kind]
     read = ", ".join(item["text"] for item in finding.evidence[:12])
     seen = f" Seen: {read}." if read and finding.method.startswith("labels") else ""
-    return f"Number of {subject}, {_METHODS[finding.method]}.{seen} Answer: {finding.count}"
+    return f"Number of {subject}, {METHOD_WORDS[finding.method]}.{seen} Answer: {finding.count}"
