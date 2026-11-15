@@ -204,3 +204,6 @@ On the Modal volume `chatchtg-object-detector`:
   two methods.
 - The scale (1:100 or 1:200) in the tables comes from the DXF title; the detector does not use it.
 - The detector does not answer a question. It is not wired into `AnswerService`.
+
+**Update (later the same day):** the object counter now answers the Swiss object questions from
+these detections: [2026-11-15-swiss-object-counter.md](2026-11-15-swiss-object-counter.md).

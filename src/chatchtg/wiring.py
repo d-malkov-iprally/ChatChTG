@@ -13,7 +13,7 @@ from chatchtg.documents.metadata import SqliteMetadataStore
 from chatchtg.evals.judge import DEFAULT_JUDGE_MODEL, ClaudeJudge, FakeJudge, Judge
 from chatchtg.extractions.store import LocalExtractionStore
 from chatchtg.llm.client import build_llm
-from chatchtg.objects.counter import DetectorObjectCounter
+from chatchtg.objects.counter import DEFAULT_SKIP, DetectorObjectCounter, parse_skip
 from chatchtg.rooms import ocr
 from chatchtg.rooms.counter import LabelRoomCounter
 
@@ -49,7 +49,8 @@ def build_answer_service(
         )
     object_counter = None
     if settings.object_counter == "detections":
-        object_counter = DetectorObjectCounter(build_extraction_store(settings))
+        skip = DEFAULT_SKIP if settings.object_counter_skip is None else parse_skip(settings.object_counter_skip)
+        object_counter = DetectorObjectCounter(build_extraction_store(settings), skip=skip)
     room_counter = None
     if settings.room_counter != "off":
         if not ocr.available():

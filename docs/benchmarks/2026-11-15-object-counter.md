@@ -129,6 +129,7 @@ The detections are on the volume under `predictions/large-1024/` (`detections.js
 - Only the five CubiCasa5K templates are claimed. The Swiss questions about windows, doors,
   toilets, washbasins, bathtubs and showers are worded differently and are not claimed: the
   detector was not trained on Swiss plans.
+  (Later: a Swiss detector answers them, [2026-11-15-swiss-object-counter.md](2026-11-15-swiss-object-counter.md).)
 - The question classifier matches the starts of the benchmark's wording. A user who asks
   "how many windows are there?" gets the LLM.
 - The model returns at most 300 detections per image. 149 plans reach that at a score of 0.05,
